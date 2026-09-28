@@ -12,6 +12,8 @@ USAGE = <<~TEXT
   OUTPUT_DIR/<name>/ (name = file name without extension, lowercased).
   With --base-url, also writes each info.json (the Jekyll plugin does this
   at build time instead, so leave it out for Jekyll sites).
+  With --v2-dir, also writes Image API 2 folders there, as links into the
+  version 3 ones (--v2-base-url gives their public URL for info.json).
 TEXT
 
 opts = { sizes: StaticIIIF::Level0::DEFAULTS[:sizes], tile_threshold: StaticIIIF::Level0::DEFAULTS[:tile_threshold],
@@ -22,6 +24,8 @@ parser = OptionParser.new do |o|
   o.on("--tile-threshold PX", Integer, "tile images whose long side exceeds PX; 0 = never (default #{opts[:tile_threshold]})") { |v| opts[:tile_threshold] = v }
   o.on("--tile-size PX", Integer, "tile width (default #{opts[:tile_size]})") { |v| opts[:tile_size] = v }
   o.on("--base-url URL", "public URL of OUTPUT_DIR; writes info.json files") { |v| opts[:base_url] = v.chomp("/") }
+  o.on("--v2-dir DIR", "also write Image API 2 folders into DIR") { |v| opts[:v2_dir] = v }
+  o.on("--v2-base-url URL", "public URL of the --v2-dir folder; writes its info.json files") { |v| opts[:v2_base_url] = v.chomp("/") }
   o.on("--force", "redo images that are up to date") { opts[:force] = true }
   o.on("-v", "--version") { puts StaticIIIF::VERSION; exit }
 end
@@ -36,14 +40,22 @@ abort "static-iiif: libvips is required (e.g. `brew install vips` or `apt-get in
 
 input, output = ARGV
 level0 = StaticIIIF::Level0.new(sizes: opts[:sizes], tile_threshold: opts[:tile_threshold], tile_size: opts[:tile_size])
-level0.generate_dir(input, output, force: opts[:force]) do |src, dir, meta|
+level0.generate_dir(input, output, force: opts[:force], v2_output_dir: opts[:v2_dir]) do |src, dir, meta|
   if meta
     puts "Created: #{dir} (#{meta['width']}x#{meta['height']}#{meta['tiles'] ? ', tiles' : ''}) from #{src}"
   else
     puts "Skipping: #{dir} is up to date"
   end
-  next unless opts[:base_url] && (meta ||= StaticIIIF::Level0.read_meta(dir))
+  meta ||= StaticIIIF::Level0.read_meta(dir)
+  next unless meta
 
-  info = StaticIIIF::ImageInfo.v3(meta, "#{opts[:base_url]}/#{File.basename(dir)}")
-  File.write(File.join(dir, "info.json"), "#{JSON.pretty_generate(info)}\n")
+  name = File.basename(dir)
+  if opts[:base_url]
+    info = StaticIIIF::ImageInfo.v3(meta, "#{opts[:base_url]}/#{name}")
+    File.write(File.join(dir, "info.json"), "#{JSON.pretty_generate(info)}\n")
+  end
+  if opts[:v2_dir] && opts[:v2_base_url]
+    info = StaticIIIF::ImageInfo.v2(meta, "#{opts[:v2_base_url]}/#{name}")
+    File.write(File.join(opts[:v2_dir], name, "info.json"), "#{JSON.pretty_generate(info)}\n")
+  end
 end

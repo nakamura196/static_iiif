@@ -21,6 +21,9 @@ module StaticIIIF
   # so a repository does not hold the original twice; static site builders
   # (Jekyll included) write the real file on output. Where symlinks are not
   # available the file is copied.
+  #
+  # Image API 2 files (see .derive_v2) are made from a finished version 3
+  # folder by linking, not by processing the image again.
   class Level0
     META_FILE = "_level0.json"
     IMAGE_EXTENSIONS = /\.(jpe?g|png|tiff?)\z/i
@@ -46,13 +49,21 @@ module StaticIIIF
     end
 
     # Process every image directly inside input_dir into output_dir/<name>.
+    # With v2_output_dir, also derive the Image API 2 folder v2_output_dir/<name>.
     # Yields (source, dir, meta_or_nil) per image; meta is nil when skipped.
-    def generate_dir(input_dir, output_dir, force: false)
+    def generate_dir(input_dir, output_dir, force: false, v2_output_dir: nil)
       images = Dir.children(input_dir).sort.map { |f| File.join(input_dir, f) }
                   .select { |f| File.file?(f) && f.match?(IMAGE_EXTENSIONS) }
       images.map do |src|
-        dir = File.join(output_dir, self.class.name_for(src))
+        name = self.class.name_for(src)
+        dir = File.join(output_dir, name)
         meta = !force && up_to_date?(src, dir) ? nil : generate(src, dir)
+        if v2_output_dir
+          v2_dir = File.join(v2_output_dir, name)
+          # redo when the version 3 folder was just made, or is newer than the version 2 one
+          v2_meta = self.class.derive_v2(dir, v2_dir) if meta || !up_to_date?(File.join(dir, META_FILE), v2_dir)
+          meta ||= v2_meta
+        end
         yield src, dir, meta if block_given?
         [src, dir, meta]
       end
@@ -93,6 +104,46 @@ module StaticIIIF
       meta
     end
 
+    # Make the Image API 2 folder v2_dir from the finished version 3 folder
+    # v3_dir. The two differ only in how sizes are written in the URL: 2 uses
+    # `<w>,` where 3 uses `<w>,<h>`, and 2 calls the full size `full` (2.1 also
+    # accepts `max`). Every file is a link into v3_dir (to the original image
+    # where v3_dir links to it), so nothing is stored twice in a repository.
+    # Returns the metadata, which is the same for both versions.
+    def self.derive_v2(v3_dir, v2_dir)
+      meta = read_meta(v3_dir) or raise Error, "#{v3_dir} has no #{META_FILE}; generate it first"
+      FileUtils.rm_rf(v2_dir)
+      Dir.glob(File.join(v3_dir, "*", "*", "0", "default.jpg")).sort.each do |file|
+        region, size = file.delete_prefix("#{v3_dir}/").split("/")
+        v2_sizes = if size == "max"
+                     %w[full max]
+                   elsif (m = size.match(/\A(\d+),\d+\z/))
+                     ["#{m[1]},"]
+                   else
+                     []
+                   end
+        target = file
+        target = File.expand_path(File.readlink(target), File.dirname(target)) while File.symlink?(target)
+        v2_sizes.each do |v2_size|
+          dest = File.join(v2_dir, region, v2_size, "0", "default.jpg")
+          next if File.exist?(dest)
+
+          FileUtils.mkdir_p(File.dirname(dest))
+          link(target, dest)
+        end
+      end
+      FileUtils.mkdir_p(v2_dir)
+      File.write(File.join(v2_dir, META_FILE), "#{JSON.pretty_generate(meta)}\n")
+      meta
+    end
+
+    def self.link(target, dest)
+      rel = Pathname.new(File.expand_path(target)).relative_path_from(Pathname.new(File.expand_path(File.dirname(dest))))
+      File.symlink(rel.to_s, dest)
+    rescue NotImplementedError, SystemCallError
+      FileUtils.cp(target, dest)
+    end
+
     private
 
     # vips dzsave writes the tile pyramid in the IIIF 3 layout. Its info.json is
@@ -121,10 +172,7 @@ module StaticIIIF
     end
 
     def link(target, dest)
-      rel = Pathname.new(File.expand_path(target)).relative_path_from(Pathname.new(File.expand_path(File.dirname(dest))))
-      File.symlink(rel.to_s, dest)
-    rescue NotImplementedError, SystemCallError
-      FileUtils.cp(target, dest)
+      self.class.link(target, dest)
     end
   end
 end

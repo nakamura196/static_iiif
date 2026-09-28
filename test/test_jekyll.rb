@@ -16,6 +16,7 @@ class TestJekyll < Minitest::Test
     FileUtils.cp_r(File.join(FIXTURES, "site"), @src)
     StaticIIIF::Level0.new(sizes: [256], tile_threshold: 500, tile_size: 256)
                       .generate(File.join(@src, "objects", "big_map.jpg"), File.join(@src, "objects/iiif/3/big_map"))
+    StaticIIIF::Level0.derive_v2(File.join(@src, "objects/iiif/3/big_map"), File.join(@src, "objects/iiif/2/big_map"))
     config = Jekyll.configuration("source" => @src, "destination" => File.join(@tmp, "_site"), "quiet" => true)
     Jekyll::Site.new(config).process
     @out = File.join(@tmp, "_site")
@@ -31,6 +32,13 @@ class TestJekyll < Minitest::Test
     assert_equal "https://example.org/demo/objects/iiif/3/big_map", info["id"]
     assert_equal 1, info["tiles"][0]["scaleFactors"].first
     refute File.exist?(File.join(@out, "objects/iiif/3/big_map/_level0.json"))
+  end
+
+  def test_info_json_v2
+    info = JSON.parse(File.read(File.join(@out, "objects/iiif/2/big_map/info.json")))
+    assert_equal "https://example.org/demo/objects/iiif/2/big_map", info["@id"]
+    assert_equal "http://iiif.io/api/image/2/context.json", info["@context"]
+    assert_equal [900, 600], StaticIIIF::ImageSize.read(File.join(@out, "objects/iiif/2/big_map/full/full/0/default.jpg"))
   end
 
   def test_linked_full_image_is_written_as_a_file
@@ -52,6 +60,8 @@ class TestJekyll < Minitest::Test
     probe = JSON.parse(File.read(File.join(@out, "probe.json")))
     assert_equal "https://example.org/demo/objects/iiif/3/big_map", probe["big"]["service"]
     assert_equal "https://example.org/demo/objects/iiif/3/big_map/full/max/0/default.jpg", probe["big"]["id"]
+    assert_equal "https://example.org/demo/objects/iiif/2/big_map", probe["big2"]["service"]
+    assert_equal "https://example.org/demo/objects/iiif/2/big_map/full/full/0/default.jpg", probe["big2"]["id"]
     assert_equal({ "id" => "https://example.org/demo/objects/Page1.jpg", "width" => 400, "height" => 300,
                    "format" => "image/jpeg" }, probe["page1"])
     assert_nil probe["ext"]

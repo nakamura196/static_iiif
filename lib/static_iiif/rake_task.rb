@@ -12,12 +12,15 @@ module StaticIIIF
   #   StaticIIIF::RakeTask.new                      # defines `rake generate_iiif`
   #
   #   rake generate_iiif
-  #   rake "generate_iiif[objects,objects/iiif/3,256;1024,4000,512,false]"
+  #   rake "generate_iiif[objects,objects/iiif/3,256;1024,4000,512,false,objects/iiif/2]"
   #
   # Arguments (all optional): input_dir, output_dir, sizes (separated by ";"),
-  # tile_threshold (0 = never tile), tile_size, force ("true" redoes up-to-date images).
+  # tile_threshold (0 = never tile), tile_size, force ("true" redoes up-to-date images),
+  # v2_output_dir (also make Image API 2 folders there; see Level0.derive_v2).
+  #
+  #   StaticIIIF::RakeTask.new { |t| t.v2_output_dir = "objects/iiif/2" } # version 2 as well
   class RakeTask < ::Rake::TaskLib
-    attr_accessor :name, :input_dir, :output_dir, :sizes, :tile_threshold, :tile_size
+    attr_accessor :name, :input_dir, :output_dir, :sizes, :tile_threshold, :tile_size, :v2_output_dir
 
     def initialize(name = :generate_iiif)
       super()
@@ -27,6 +30,7 @@ module StaticIIIF
       @sizes = Level0::DEFAULTS[:sizes]
       @tile_threshold = Level0::DEFAULTS[:tile_threshold]
       @tile_size = Level0::DEFAULTS[:tile_size]
+      @v2_output_dir = nil
       yield self if block_given?
       define
     end
@@ -35,7 +39,7 @@ module StaticIIIF
 
     def define
       desc "Generate static IIIF Image API level 0 files (sizes; tiles for large images)"
-      task name, %i[input_dir output_dir sizes tile_threshold tile_size force] do |_t, args|
+      task name, %i[input_dir output_dir sizes tile_threshold tile_size force v2_output_dir] do |_t, args|
         level0 = Level0.new(
           sizes: args[:sizes] ? args[:sizes].split(/[;,\s]+/) : sizes,
           tile_threshold: args[:tile_threshold] || tile_threshold,
@@ -45,11 +49,14 @@ module StaticIIIF
 
         input = args[:input_dir] || input_dir
         output = args[:output_dir] || output_dir
-        level0.generate_dir(input, output, force: args[:force] == "true") do |src, dir, meta|
+        v2_output = args[:v2_output_dir] || v2_output_dir
+        v2_output = nil if v2_output.to_s.empty?
+        level0.generate_dir(input, output, force: args[:force] == "true", v2_output_dir: v2_output) do |src, dir, meta|
           next puts("Skipping: #{dir} is up to date") unless meta
 
           tiles = meta["tiles"] ? ", tiles" : ""
-          puts "Created: #{dir} (#{meta['width']}x#{meta['height']}, #{meta['sizes'].size} sizes#{tiles}) from #{src}"
+          v2 = v2_output ? " and #{File.join(v2_output, File.basename(dir))}" : ""
+          puts "Created: #{dir}#{v2} (#{meta['width']}x#{meta['height']}, #{meta['sizes'].size} sizes#{tiles}) from #{src}"
         end
       end
     end

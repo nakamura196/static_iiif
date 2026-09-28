@@ -67,4 +67,36 @@ class TestLevel0 < Minitest::Test
     assert_equal [nil, nil], second
     assert(level0.generate_dir(@objects, @tmp, force: true).all? { |_, _, meta| meta })
   end
+
+  def test_derive_v2_links_into_the_v3_folder
+    v3 = File.join(@tmp, "3", "big")
+    v2 = File.join(@tmp, "2", "big")
+    meta = StaticIIIF::Level0.new(sizes: [256], tile_threshold: 500, tile_size: 256).generate(File.join(@objects, "big_map.jpg"), v3)
+    assert_equal meta, StaticIIIF::Level0.derive_v2(v3, v2)
+    assert_equal meta, StaticIIIF::Level0.read_meta(v2)
+    # the full size by name (2.0 "full", 2.1 "max") and by width; the original, not a link to a link
+    %w[full max 900,].each do |size|
+      path = jpg(v2, size)
+      assert File.symlink?(path), size
+      assert_equal File.expand_path(File.join(@objects, "big_map.jpg")), File.expand_path(File.readlink(path), File.dirname(path))
+    end
+    assert_equal [256, 171], StaticIIIF::ImageSize.read(jpg(v2, "256,"))
+    # tiles: <w>,<h> in version 3 is <w>, in version 2
+    assert File.exist?(File.join(v2, "0,0,256,256", "256,", "0", "default.jpg"))
+    assert_empty Dir.glob(File.join(v2, "*", "*,[0-9]*"))
+  end
+
+  def test_generate_dir_with_v2
+    level0 = StaticIIIF::Level0.new(tile_threshold: 0)
+    v3 = File.join(@tmp, "3")
+    v2 = File.join(@tmp, "2")
+    level0.generate_dir(@objects, v3, v2_output_dir: v2)
+    assert File.exist?(jpg(File.join(v2, "page1"), "full"))
+    assert_equal([nil, nil], level0.generate_dir(@objects, v3, v2_output_dir: v2).map { |_, _, meta| meta })
+    # a missing version 2 folder is made even when version 3 is up to date
+    FileUtils.rm_rf(File.join(v2, "page1"))
+    made = level0.generate_dir(@objects, v3, v2_output_dir: v2).map { |_, _, meta| !meta.nil? }
+    assert_equal [true, false], made
+    assert File.exist?(jpg(File.join(v2, "page1"), "400,"))
+  end
 end

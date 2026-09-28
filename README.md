@@ -9,6 +9,9 @@ IIIF for static sites: publish local images as IIIF without an image server.
   with `--base-url`, so the same image files work in development and production.
 - **Presentation 3 manifests**, from a small Ruby builder or from your own
   templates (a Liquid filter reads each image's size from its file header).
+- **Version 2 beside version 3, if you want it**: Image API 2 folders made
+  entirely of links into the version 3 ones, and Presentation 2 manifests, for
+  viewers and tools that read only version 2.
 - The full image is **linked, not copied**, so a repository does not hold the
   original twice.
 
@@ -16,12 +19,14 @@ Why: static collection sites (CollectionBuilder, Wax, plain Jekyll) mostly
 either show IIIF from someone else's server, or skip IIIF altogether. The
 Ruby tool that did make static IIIF, [wax_iiif](https://github.com/minicomp/wax_iiif),
 writes IIIF 2.0 only, always tiles every image, and has not changed since 2023.
-static_iiif writes IIIF 3, tiles only what needs it, and keeps the API version
-in the URL (`.../iiif/3/...`, as Omeka S IIIF Server does), so a v2 or v4
-output can later sit beside v3 on a host that cannot negotiate content.
+static_iiif writes IIIF 3 (and, optionally, 2), tiles only what needs it, and
+keeps the API version in the URL (`.../iiif/3/...`, `.../iiif/2/...`, as Omeka S
+IIIF Server does), because a static host cannot choose a version by content
+negotiation.
 
-Tested with Mirador 3 (uses the sizes and the tiles) and Universal Viewer 4
-(displays the manifests; it loads the full image rather than the level 0 service).
+Tested with Mirador 3 (uses the sizes and the tiles, in version 3 and 2) and
+Universal Viewer 4 (displays the version 3 manifests; it loads the full image
+rather than the level 0 service).
 
 Requires Ruby 3.1+ and, for making images only, the libvips command-line tools
 (`brew install vips`, `apt-get install libvips-tools`). libvips 8.16 leaves the
@@ -49,6 +54,19 @@ Options: `--sizes 256,1024`, `--tile-threshold 4000` (0 = never tile),
 `--tile-size 512`, `--force` (images whose files are newer than their output
 are redone anyway).
 
+### Version 2
+
+```sh
+static-iiif generate objects objects/iiif/3 --v2-dir objects/iiif/2 --v2-base-url https://example.org/objects/iiif/2
+```
+
+`--v2-dir` also writes an Image API 2 folder per image. The two versions differ
+only in how a size is written in the URL (`<w>,` in 2, `<w>,<h>` in 3; the full
+size is `full` or `max` in 2), so every file in it is a link to the same image
+in the version 3 folder or to the original. The repository gains links only;
+a site builder that writes real files (Jekyll in production) does publish the
+images a second time.
+
 ## Ruby
 
 ```ruby
@@ -66,7 +84,18 @@ m.add_canvas(label: "1", image: StaticIIIF.image("objects/map.jpg",
   level0_dir: "objects/iiif/3/map",
   service_url: "https://example.org/objects/iiif/3/map"))
 File.write("iiif/3/map/manifest.json", JSON.pretty_generate(m.to_h))
+
+# Presentation 2: a separate id, images described for version 2
+StaticIIIF::Level0.derive_v2("objects/iiif/3/map", "objects/iiif/2/map")
+m2 = StaticIIIF::Manifest.new(id: "https://example.org/iiif/2/map/manifest.json", label: "Campus map")
+m2.add_canvas(label: "1", image: StaticIIIF.image("objects/map.jpg", url: "https://example.org/objects/map.jpg",
+  level0_dir: "objects/iiif/2/map", service_url: "https://example.org/objects/iiif/2/map", version: 2))
+File.write("iiif/2/map/manifest.json", JSON.pretty_generate(m2.to_h(version: 2)))
 ```
+
+Presentation 2 has fewer fields: labels and values are plain strings, `rights`
+and `required_statement` become `license` and `attribution`, `homepage`
+becomes `related`, and `provider` is left out.
 
 `StaticIIIF::ImageSize.read(path)` returns `[width, height]` of a JPEG or PNG
 from its header, without an image library.
@@ -77,6 +106,7 @@ from its header, without an image library.
 # Rakefile (or rakelib/iiif.rake)
 require "static_iiif/rake_task"
 StaticIIIF::RakeTask.new # rake generate_iiif; settable: input_dir, output_dir, sizes, tile_threshold, tile_size
+StaticIIIF::RakeTask.new { |t| t.v2_output_dir = "objects/iiif/2" } # version 2 as well
 ```
 
 ## Jekyll
@@ -89,13 +119,14 @@ end
 ```
 
 ```yaml
-# _config.yml (optional; the default is shown)
+# _config.yml (optional; the defaults are shown)
 static_iiif:
   images: objects/iiif/3
+  images_v2: objects/iiif/2
 ```
 
 At build time the plugin writes `info.json` into each level 0 folder under
-`images`, using `url` + `baseurl`. In your manifest template, the `iiif_image`
+`images` (and the version 2 one under `images_v2`), using `url` + `baseurl`. In your manifest template, the `iiif_image`
 filter describes an image by its site path:
 
 ```liquid
@@ -111,22 +142,27 @@ filter describes an image by its site path:
 
 It returns `id`, `width`, `height`, `format` and, when the image has level 0
 files, `service` (and `id` then points into the service). External URLs and
-files it cannot read give `nil`.
+files it cannot read give `nil`. For a Presentation 2 template, use
+`iiif_image: 2`; `service` is then the version 2 folder, to be written as
+`"service": { "@context": "http://iiif.io/api/image/2/context.json", "@id": ..., "profile": "http://iiif.io/api/image/2/level0.json" }`.
 
 Note: in development Jekyll copies links as links (they still resolve inside
 `_site`); with `JEKYLL_ENV=production` it writes the real files.
 
 ### CollectionBuilder
 
-A working setup (manifests at `/iiif/3/<objectid>/manifest.json` generated
-with CollectionBuilder's page generator, shown in Universal Viewer on the item
-page) is in [cb-ja-demo](https://github.com/nakamura196/cb-ja-demo):
-see `_layouts/item/manifest.json` and the `page_gen` section of `_config.yml`.
+A working setup (manifests at `/iiif/3/<objectid>/manifest.json` and
+`/iiif/2/<objectid>/manifest.json` generated with CollectionBuilder's page
+generator, shown in Universal Viewer on the item page) is in
+[cb-ja-demo](https://github.com/nakamura196/cb-ja-demo): see
+`_layouts/item/manifest.json`, `_layouts/item/manifest-v2.json` and the
+`page_gen` section of `_config.yml`.
 
 ## Status
 
-0.1: Image API 3 level 0 and Presentation 3. Planned: Presentation 2 / Image
-API 2 output beside v3, a collection manifest, TIFF sizes without libvips.
+0.2: Image API 3 level 0 and Presentation 3; optionally Image API 2 and
+Presentation 2 beside them. Planned: a collection manifest, TIFF sizes without
+libvips.
 
 ## Development
 
