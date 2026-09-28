@@ -24,7 +24,9 @@ Tested with Mirador 3 (uses the sizes and the tiles) and Universal Viewer 4
 (displays the manifests; it loads the full image rather than the level 0 service).
 
 Requires Ruby 3.1+ and, for making images only, the libvips command-line tools
-(`brew install vips`, `apt-get install libvips-tools`).
+(`brew install vips`, `apt-get install libvips-tools`). libvips 8.16 leaves the
+smallest tile level out of info.json (8.18 includes it); viewers then start one
+level higher, which is harmless.
 
 ## Command
 
