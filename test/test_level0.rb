@@ -1,0 +1,70 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class TestLevel0 < Minitest::Test
+  include VipsHelper
+
+  def setup
+    require_vips
+    @tmp = Dir.mktmpdir
+    @objects = File.join(FIXTURES, "site", "objects")
+  end
+
+  def teardown
+    FileUtils.rm_rf(@tmp) if @tmp
+  end
+
+  def jpg(dir, size)
+    File.join(dir, "full", size, "0", "default.jpg")
+  end
+
+  def test_small_image_gets_sizes_but_no_tiles
+    dir = File.join(@tmp, "page1")
+    meta = StaticIIIF::Level0.new(sizes: [100, 256, 1024], tile_threshold: 4000).generate(File.join(@objects, "Page1.jpg"), dir)
+    assert_equal({ "width" => 400, "height" => 300 }, meta.slice("width", "height"))
+    assert_equal [[100, 75], [256, 192], [400, 300]], meta["sizes"].map { |s| [s["width"], s["height"]] }
+    refute meta.key?("tiles")
+    assert_equal [256, 192], StaticIIIF::ImageSize.read(jpg(dir, "256,192"))
+    # the full image, by name and by size, is the original
+    assert_equal File.binread(File.join(@objects, "Page1.jpg")), File.binread(jpg(dir, "max"))
+    assert_equal File.binread(jpg(dir, "max")), File.binread(jpg(dir, "400,300"))
+    assert_equal meta, StaticIIIF::Level0.read_meta(dir)
+    assert_empty Dir.glob(File.join(dir, "*,*,*,*"))
+  end
+
+  def test_full_image_is_linked_not_copied
+    dir = File.join(@tmp, "page1")
+    StaticIIIF::Level0.new.generate(File.join(@objects, "Page1.jpg"), dir)
+    assert File.symlink?(jpg(dir, "max"))
+    refute File.readlink(jpg(dir, "max")).start_with?("/"), "link should be relative"
+  end
+
+  def test_large_image_gets_tiles_and_top_level
+    dir = File.join(@tmp, "big")
+    meta = StaticIIIF::Level0.new(sizes: [256], tile_threshold: 500, tile_size: 256).generate(File.join(@objects, "big_map.jpg"), dir)
+    tiles = meta["tiles"].first
+    assert_equal 256, tiles["width"]
+    assert_equal 1, tiles["scaleFactors"].first # how many levels vips makes depends on its version
+    assert File.exist?(File.join(dir, "0,0,256,256", "256,256", "0", "default.jpg"))
+    # The first tile of the top advertised level must exist. When that level fits
+    # in one tile its region is the whole image, written as full/<w>,<h> (vips puts
+    # it under full/, and it must survive next to our sizes).
+    f = tiles["scaleFactors"].last
+    w = [256 * f, 900].min
+    h = [256 * f, 600].min
+    region = w == 900 && h == 600 ? "full" : "0,0,#{w},#{h}"
+    top = File.join(dir, region, "#{(w.to_f / f).ceil},#{(h.to_f / f).ceil}", "0", "default.jpg")
+    assert File.exist?(top), "top level for scale #{f}: #{top}"
+    refute File.exist?(File.join(dir, "info.json"))
+  end
+
+  def test_generate_dir_skips_up_to_date_images
+    level0 = StaticIIIF::Level0.new(tile_threshold: 0)
+    first = level0.generate_dir(@objects, @tmp).map { |_, dir, meta| [File.basename(dir), !meta.nil?] }
+    assert_equal [["page1", true], ["big_map", true]], first # sorted by file name: Page1.jpg, big_map.jpg
+    second = level0.generate_dir(@objects, @tmp).map { |_, _, meta| meta }
+    assert_equal [nil, nil], second
+    assert(level0.generate_dir(@objects, @tmp, force: true).all? { |_, _, meta| meta })
+  end
+end

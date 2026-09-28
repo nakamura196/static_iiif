@@ -1,0 +1,7 @@
+---
+---
+{%- assign big = "/objects/big_map.jpg" | iiif_image -%}
+{%- assign page1 = "objects/Page1.jpg" | iiif_image -%}
+{%- assign ext = "https://example.com/x.jpg" | iiif_image -%}
+{%- assign missing = "objects/none.jpg" | iiif_image -%}
+{ "big": {{ big | jsonify }}, "page1": {{ page1 | jsonify }}, "ext": {{ ext | jsonify }}, "missing": {{ missing | jsonify }} }
