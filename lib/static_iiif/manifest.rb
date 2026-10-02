@@ -24,8 +24,13 @@ module StaticIIIF
     CONTEXT_V2 = "http://iiif.io/api/presentation/2/context.json"
     RIGHTS_PATTERN = %r{\Ahttps?://(creativecommons\.org|rightsstatements\.org)/}
 
+    # behavior: how viewers lay out the canvases — "individuals" (one at a time),
+    # "paged" (a book, two side by side) or "continuous" (a scroll); written as
+    # `behavior` in version 3 and as the sequence's `viewingHint` in version 2.
+    BEHAVIORS = %w[individuals paged continuous].freeze
+
     attr_accessor :label, :summary, :rights, :required_statement, :homepage, :thumbnail,
-                  :viewing_direction, :provider
+                  :viewing_direction, :provider, :behavior
     attr_reader :id, :language, :metadata, :canvases
 
     # language: the language of labels and descriptive text ("none" if unknown)
@@ -64,6 +69,7 @@ module StaticIIIF
       end
       h["rights"] = rights.sub(%r{\Ahttps://creativecommons}, "http://creativecommons") if rights.to_s.match?(RIGHTS_PATTERN)
       h["viewingDirection"] = viewing_direction if %w[left-to-right right-to-left top-to-bottom bottom-to-top].include?(viewing_direction)
+      h["behavior"] = [behavior.to_s] if BEHAVIORS.include?(behavior.to_s)
       h["homepage"] = [text_resource(homepage, label)] if present?(homepage)
       h["thumbnail"] = [image_resource(thumbnail)] if present?(thumbnail)
       if provider
@@ -83,10 +89,10 @@ module StaticIIIF
       h["viewingDirection"] = viewing_direction if %w[left-to-right right-to-left top-to-bottom bottom-to-top].include?(viewing_direction)
       h["related"] = { "@id" => homepage, "format" => "text/html" } if present?(homepage)
       h["thumbnail"] = { "@id" => thumbnail } if present?(thumbnail)
-      h["sequences"] = [{
-        "@id" => "#{base}/sequence/normal", "@type" => "sc:Sequence",
-        "canvases" => canvases.each_with_index.map { |c, i| canvas_v2(c, i + 1) }
-      }]
+      sequence = { "@id" => "#{base}/sequence/normal", "@type" => "sc:Sequence" }
+      sequence["viewingHint"] = behavior.to_s if BEHAVIORS.include?(behavior.to_s)
+      sequence["canvases"] = canvases.each_with_index.map { |c, i| canvas_v2(c, i + 1) }
+      h["sequences"] = [sequence]
       h
     end
 

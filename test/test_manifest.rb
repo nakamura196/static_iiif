@@ -96,4 +96,17 @@ class TestManifest < Minitest::Test
     assert_equal [{ "width" => 256, "scaleFactors" => [1, 2] }], info["tiles"]
     refute info.key?("type")
   end
+
+  def test_behavior
+    m = StaticIIIF::Manifest.new(id: "https://example.org/iiif/3/book/manifest.json", label: "x")
+    m.add_canvas(image: { "id" => "https://example.org/p1.jpg", "width" => 4, "height" => 3 })
+    refute m.to_h.key?("behavior")
+    m.behavior = "paged"
+    assert_equal ["paged"], m.to_h["behavior"]
+    assert_equal "paged", m.to_h(version: 2)["sequences"][0]["viewingHint"]
+    refute m.to_h(version: 2).key?("viewingHint")
+    m.behavior = "two-up" # not a IIIF value: left out
+    refute m.to_h.key?("behavior")
+    refute m.to_h(version: 2)["sequences"][0].key?("viewingHint")
+  end
 end

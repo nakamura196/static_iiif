@@ -79,6 +79,7 @@ m = StaticIIIF::Manifest.new(id: "https://example.org/iiif/3/map/manifest.json",
                              label: "Campus map", language: "en")
 m.metadata << ["Date", "1930"]
 m.rights = "http://creativecommons.org/licenses/by/4.0/"
+m.behavior = "individuals"   # or "paged" (a book, two pages side by side), "continuous" (a scroll)
 m.add_canvas(label: "1", image: StaticIIIF.image("objects/map.jpg",
   url: "https://example.org/objects/map.jpg",                 # used without level 0 files
   level0_dir: "objects/iiif/3/map",
@@ -95,7 +96,13 @@ File.write("iiif/2/map/manifest.json", JSON.pretty_generate(m2.to_h(version: 2))
 
 Presentation 2 has fewer fields: labels and values are plain strings, `rights`
 and `required_statement` become `license` and `attribution`, `homepage`
-becomes `related`, and `provider` is left out.
+becomes `related`, `behavior` becomes the sequence's `viewingHint`, and
+`provider` is left out.
+
+Choose `behavior` by how the images were taken: `paged` only when each image
+is one page. Collections photographed an opening at a time (common for
+Japanese and other East Asian books) need `individuals`, or a viewer that
+pages will show two openings side by side.
 
 `StaticIIIF::ImageSize.read(path)` returns `[width, height]` of a JPEG or PNG
 from its header, without an image library.
@@ -160,8 +167,8 @@ generator, shown in Universal Viewer on the item page) is in
 
 ## Status
 
-0.2: Image API 3 level 0 and Presentation 3; optionally Image API 2 and
-Presentation 2 beside them. Planned: a collection manifest, TIFF sizes without
+0.3: Image API 3 level 0 and Presentation 3; optionally Image API 2 and
+Presentation 2 beside them; `behavior` (individuals / paged / continuous). Planned: a collection manifest, TIFF sizes without
 libvips.
 
 ## Development
