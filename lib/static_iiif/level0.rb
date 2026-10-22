@@ -138,7 +138,8 @@ module StaticIIIF
     end
 
     def self.link(target, dest)
-      rel = Pathname.new(File.expand_path(target)).relative_path_from(Pathname.new(File.expand_path(File.dirname(dest))))
+      # real paths on both sides, so a folder reached through a link (macOS /var -> /private/var) counts right
+      rel = Pathname.new(File.realpath(target)).relative_path_from(Pathname.new(File.realpath(File.dirname(dest))))
       File.symlink(rel.to_s, dest)
     rescue NotImplementedError, SystemCallError
       FileUtils.cp(target, dest)

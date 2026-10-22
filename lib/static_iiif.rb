@@ -6,6 +6,8 @@ require_relative "static_iiif/vips"
 require_relative "static_iiif/level0"
 require_relative "static_iiif/image_info"
 require_relative "static_iiif/manifest"
+require_relative "static_iiif/table_of_contents"
+require_relative "static_iiif/data_manifests"
 
 # Static IIIF for sites without an image server: IIIF Image API level 0 files
 # (fixed sizes, tiles only for large images) and manifests, in version 3 and,
@@ -38,5 +40,26 @@ module StaticIIIF
 
     format = path.to_s.match?(/\.png\z/i) ? "image/png" : "image/jpeg"
     { "id" => url, "width" => size[0], "height" => size[1], "format" => format }
+  end
+
+  # Describe an image that lives on someone else's IIIF Image API server, from
+  # its service URL and size alone (no local file). For Manifest#add_canvas.
+  #
+  #   version  2 or 3, the Image API version of the service
+  #   profile  "level1" (default), "level2", ... or a full profile URI
+  #
+  # The body points at the whole image (full/full for version 2, full/max for
+  # version 3) and carries the service with its version and profile.
+  def external_image(service_url, width:, height:, version: 2, profile: "level1", format: "image/jpeg")
+    service = service_url.to_s.chomp("/")
+    full = version.to_i == 2 ? "full" : "max"
+    { "id" => "#{service}/full/#{full}/0/default.jpg", "width" => width.to_i, "height" => height.to_i,
+      "format" => format, "service" => service, "service_version" => version.to_i == 2 ? 2 : 3,
+      "profile" => profile.to_s.empty? ? "level1" : profile.to_s }
+  end
+
+  # A thumbnail of that many pixels wide from an Image API service (2 or 3).
+  def thumbnail_url(service_url, width = 200)
+    "#{service_url.to_s.chomp('/')}/full/#{width},/0/default.jpg"
   end
 end
