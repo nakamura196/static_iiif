@@ -44,10 +44,12 @@ module StaticIIIF
   #          provider: true                       # the site's title and url
   #          required_statement: [Rights, rights]
   #          metadata_skip: [title, description, manifest]
-  #          base_url: https://example.org        # for the ids (default: url + baseurl)
+  #          base_url: https://example.org        # for the ids (default: url + baseurl; a path is put after url)
   #          canvases: iiif/canvases              # <id>.csv per item, for images elsewhere
   #          toc: iiif/toc                        # <id>.txt per item (optional)
   #          enabled: false                       # e.g. in the config of a second build
+  #          write: false                         # or: a second build links to the first one's
+  #                                               # manifests (base_url) and writes none
   #
   #    Every row of the site's metadata CSV (`metadata:` in _config.yml) that has
   #    images gets a manifest, with `metadata` from _data/config-metadata.csv.
@@ -87,7 +89,10 @@ module StaticIIIF
 
     # The manifests ManifestGenerator made, per site: { version => { item id => url } }
     def self.manifests(site)
-      (@manifests ||= ObjectSpace::WeakMap.new)[site] ||= { 3 => {}, 2 => {} }
+      # kept on the site: a WeakMap also drops its values, so the table vanished when
+      # nothing else held it (a build with `write: false`)
+      site.instance_variable_get(:@static_iiif_manifests) ||
+        site.instance_variable_set(:@static_iiif_manifests, { 3 => {}, 2 => {} })
     end
 
     # A file whose content is produced at build time (no source file, no Liquid).
@@ -153,7 +158,9 @@ module StaticIIIF
 
         made = Jekyll.manifests(site)
         made.each_value(&:clear)
-        base_url = config["base_url"] || "#{site.config['url']}#{site.config['baseurl']}"
+        base_url = config["base_url"] || site.config["baseurl"].to_s
+        # a path (e.g. the first build's baseurl) is on this site's url, so local builds stay local
+        base_url = "#{site.config['url']}#{base_url}" unless base_url.match?(%r{\A[a-z][a-z0-9+.-]*://}i)
         config = config.merge("provider" => [site.config["title"], "/"]) if config["provider"] == true
         fields = site.data[config["metadata_config"] || "config-metadata"]
         rows = site.data[site.config["metadata"]]
@@ -165,7 +172,15 @@ module StaticIIIF
           next unless manifests.manifest?(row)
 
           id = row[manifests.id_column].to_s
-          [3, 2].each { |version| add(site, manifests, row, id, version, made) }
+          [3, 2].each do |version|
+            # write: false links to the manifests of another build (base_url) without writing them
+            if config["write"] == false
+              url = manifests.manifest_id(version, id)
+              made[version][id] = url if url
+            else
+              add(site, manifests, row, id, version, made)
+            end
+          end
         end
       end
 

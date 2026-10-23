@@ -228,7 +228,7 @@ canvases file gets a manifest; the item's descriptive `metadata` comes from `_da
 ```yaml
 static_iiif:
   manifests:
-    base_url: https://app.example.org      # the ids; default is url + baseurl
+    base_url: https://app.example.org      # the ids; default is url + baseurl; a path is put after url
     v3: iiif/3/%{id}/manifest.json         # output path(s); the first is the manifest id
     v2: ["iiif/2/%{id}/manifest", "iiif/2/%{id}/manifest.json"]   # optional
     canvases: iiif/canvases                # data directories (default shown)
@@ -244,8 +244,13 @@ static_iiif:
     service: { version: 2, profile: level1 }   # for canvases without a profile column
     metadata_skip: [manifest, manifest_v3]     # fields of config-metadata.csv to leave out
     pretty: false                              # true for indented JSON
-    enabled: true                              # false in the config of a second build of the same site
+    enabled: true                              # false: no manifests and no iiif_manifest links
+    write: true                                # false: iiif_manifest gives the base_url ones, nothing written
 ```
+
+A site built twice, once per interface language, should keep one URL per manifest. Let the first
+build write them, and give the second build `base_url` (the first build's baseurl, e.g. `/demo`) and
+`write: false`: its item pages then open the first build's manifests.
 
 Keep `iiif/canvases` and `iiif/toc` out of the published site (`exclude:`). Manifests are written when
 Jekyll writes the site and are not kept in memory; the ids use `base_url`, so a local build gives the

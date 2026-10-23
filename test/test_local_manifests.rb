@@ -141,6 +141,28 @@ class TestLocalManifests < Minitest::Test
                  File.read(File.join(build, "viewer.html")).strip
   end
 
+  def test_second_build_links_to_the_first_ones_manifests
+    config = Marshal.load(Marshal.dump(@config))
+    config["baseurl"] = "/demo/en"
+    config["static_iiif"]["manifests"].merge!("base_url" => "/demo", "write" => false)
+    out = build(config)
+    refute File.exist?(File.join(out, "iiif"))
+    assert_equal "#{BASE}/iiif/3/map/manifest.json|#{BASE}/iiif/2/book/manifest.json||",
+                 File.read(File.join(out, "viewer.html")).strip
+  end
+
+  def test_table_of_manifests_outlives_garbage_collection
+    config = Marshal.load(Marshal.dump(@config))
+    config["static_iiif"]["manifests"]["write"] = false
+    File.write(File.join(@src, "_config.yml"), config.to_yaml)
+    site = Jekyll::Site.new(Jekyll.configuration("source" => @src, "destination" => File.join(@tmp, "_site"), "quiet" => true))
+    site.reset
+    site.read
+    site.generate
+    GC.start
+    assert_equal "#{BASE}/iiif/3/map/manifest.json", StaticIIIF::Jekyll.manifests(site)[3]["map"]
+  end
+
   def test_turned_off
     config = Marshal.load(Marshal.dump(@config))
     config["static_iiif"]["manifests"]["local_images"] = false
