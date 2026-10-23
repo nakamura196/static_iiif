@@ -33,6 +33,16 @@ class TestLevel0 < Minitest::Test
     assert_empty Dir.glob(File.join(dir, "*,*,*,*"))
   end
 
+  def test_each_size_is_also_linked_by_width
+    dir = File.join(@tmp, "page1")
+    StaticIIIF::Level0.new(sizes: [90, 256]).generate(File.join(@objects, "Page1.jpg"), dir)
+    %w[90,68 256,192 400,300].each do |size|
+      by_width = jpg(dir, size.sub(/\d+\z/, ""))
+      assert File.symlink?(by_width), by_width
+      assert_equal File.binread(jpg(dir, size)), File.binread(by_width)
+    end
+  end
+
   def test_full_image_is_linked_not_copied
     dir = File.join(@tmp, "page1")
     StaticIIIF::Level0.new.generate(File.join(@objects, "Page1.jpg"), dir)

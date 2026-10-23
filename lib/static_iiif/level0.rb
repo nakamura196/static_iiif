@@ -13,6 +13,7 @@ module StaticIIIF
   #   <dir>/full/max/0/default.jpg          the full image
   #   <dir>/full/<w>,<h>/0/default.jpg      the full image again (clients ask for it by size)
   #   <dir>/full/<w>,<h>/0/default.jpg      each of `sizes` smaller than the image
+  #   <dir>/full/<w>,/0/default.jpg         each size again, by width only (links)
   #   <dir>/<region>/<w>,<h>/0/default.jpg  tiles, only when the long side exceeds
   #                                         `tile_threshold` (0 or nil = never)
   #   <dir>/_level0.json                    what was made (see ImageInfo)
@@ -96,12 +97,24 @@ module StaticIIIF
         { "width" => w, "height" => h }
       end
       made << { "width" => width, "height" => height }
+      link_by_width(dir, made)
 
       meta = { "width" => width, "height" => height, "sizes" => made }
       tiles = tile(src, dir) if tile_threshold.positive? && [width, height].max > tile_threshold
       meta["tiles"] = tiles if tiles
       File.write(File.join(dir, META_FILE), "#{JSON.pretty_generate(meta)}\n")
       meta
+    end
+
+    # Universal Viewer (through manifesto) asks an image service of any version
+    # for `full/<w>,/0/default.jpg`, the version 2 form, for its thumbnails.
+    # Version 3 level 0 needs only `<w>,<h>`, so link each size by width as well.
+    def link_by_width(dir, sizes)
+      sizes.each do |s|
+        dest = File.join(dir, "full", "#{s['width']},", "0", "default.jpg")
+        FileUtils.mkdir_p(File.dirname(dest))
+        self.class.link(File.join(dir, "full", "#{s['width']},#{s['height']}", "0", "default.jpg"), dest)
+      end
     end
 
     # Make the Image API 2 folder v2_dir from the finished version 3 folder

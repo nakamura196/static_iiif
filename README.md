@@ -32,7 +32,11 @@ negotiation.
 
 Tested with Mirador 3 (uses the sizes and the tiles, in version 3 and 2) and
 Universal Viewer 4 (displays the version 3 manifests; it loads the full image
-rather than the level 0 service).
+rather than the level 0 service). Universal Viewer asks for thumbnails as
+`full/<w>,/0/default.jpg` whatever the service's version, so every size is also
+linked by width; its thumbnails are 90 and 200 px wide by default, so include
+those in `sizes` (e.g. `[90, 200, 256, 1024]`) if you show it. Folders made by
+0.5.0 or earlier have no such links: run once with `force`.
 
 Requires Ruby 3.1+ and, for making images only, the libvips command-line tools
 (`brew install vips`, `apt-get install libvips-tools`). libvips 8.16 leaves the
@@ -315,6 +319,7 @@ CollectionBuilder's own files are not changed.
 
 ## Status
 
+0.5.1: each size also linked as `full/<w>,` in the version 3 folders (Universal Viewer's thumbnails).
 0.4: item manifests from the metadata CSV (the site's own images, or data files for images on
 another server), tables of contents. 0.3: Image API 3 level 0 and Presentation 3; optionally Image
 API 2 and Presentation 2 beside them; `behavior` (individuals / paged / continuous). Planned: a
