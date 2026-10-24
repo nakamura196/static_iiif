@@ -317,6 +317,20 @@ for one map (tiled) and one compound object, shown in Universal Viewer on the it
 See `static_iiif:` in `_config.yml` and `_config.en.yml`, and `_layouts/item/iiif.html`.
 CollectionBuilder's own files are not changed.
 
+The same setup added to CollectionBuilder-CSV's own demo data is
+[cb-theme-test](https://github.com/nakamura196/cb-theme-test)
+([site](https://nakamura196.github.io/cb-theme-test/)): the gem in `Gemfile`,
+`rakelib/generate_iiif.rake`, three lines of `static_iiif:` in `_config.yml`, and `iiif` as the
+`display_template` of `demo_013` (a compound object of three photographs). Two things it showed:
+
+- Only images on the site are used. Most `object_location`s in that demo data are URLs elsewhere,
+  so as it comes only 4 of its 15 items get a manifest; cb-theme-test copies four more images
+  into `objects/`. For images on another server, see "Images on another server" above.
+- Manifests and `info.json` carry `url` + `baseurl`, so open the site at the host that
+  `jekyll serve` was given. With `--host 127.0.0.1` the URLs say `localhost` while the browser
+  is on `127.0.0.1`, so the viewer is pointed at another origin; use `--host localhost` and open
+  `http://localhost:<port>`.
+
 ## Status
 
 0.5.1: each size also linked as `full/<w>,` in the version 3 folders (Universal Viewer's thumbnails).
