@@ -165,3 +165,12 @@ first, then images in the site, own templates, Ruby), Part 2 (level 0, command, 
 at build time), then Jekyll, CollectionBuilder, Status. Checked by diffing the sorted lines of the old and
 new README: what disappeared is the old opening's bullets and re-wrapped lines. The "images on another
 server" section still describes the canvases files; it changes when `object_location` = info.json is built.
+
+## 2026-10-24 (later) Found: the size-reading tool already exists in one site
+
+The largest site using canvases files already has an ingest script (Python, written in another session
+and merged there): staff upload tables of canvases with image URLs, and the script reads each new
+info.json, reuses the sizes already in `iiif/canvases/`, and reports images whose size could not be read.
+Its staff manual is written around that. So the tool in the gem is a port of something already in use,
+not a new idea; port its rules (reuse, report per row) rather than designing them again. That site's
+procedures do not change with today's decisions.
