@@ -291,3 +291,62 @@ Jekyll does not copy folders whose names start with `_`, so the file stays out o
 more line each site has to remember, and the English build copied it too). README, the command's help and
 the test's path changed with it; tests 68 runs, 0 failures (Homebrew Ruby). Sites made with the old default
 (cb-ja-demo worktree `info-json`) need the file moved, or `services:` set.
+
+## 2026-10-25 Measured: lda with tiles at 2,000 px is 1.9 GB as published (over the 1 GB Pages limit)
+
+lda worktree `lda.worktrees/iiif-tiles` (branch `iiif-tiles`, from origin/master, not committed). Gem 0.5.1
+(c2806f1). The gem's rake task reads one folder only; lda's spreads are in `files/original/<issue>/`, so lda's
+`rakelib/generate_iiif.rake` now calls `Level0#generate_dir` per issue folder, `tile_threshold: 2000`, into the
+default `objects/iiif/3` and `objects/iiif/2`. `share_ja_assets.sh` also drops the English build's `objects/`.
+
+- All 188 spreads 3680×2456; all tiled (512 px, scale factors 1–8, 56 tiles each). 109 s on this Mac.
+- On disk: tiles and small sizes 332 MB in `objects/iiif/3` (originals 176 MB; tiles Q85, originals Q92; the
+  estimate "tiles about as large as the originals" was wrong by 1.9×). `objects/iiif/2` 0.75 MB, all links.
+- `_site` 544 MB as Jekyll leaves it, **1.9 GB with the links followed** (`du -shL`): `objects/iiif/3` 863 MB,
+  `objects/iiif/2` 837 MB, `files` 183 MB. English build not counted.
+- Why: `actions/upload-pages-artifact` (v5, fc324d3) runs `tar --dereference --hard-dereference`, so every link
+  becomes a copy. Per spread, the original is linked 3 times in version 3 (`full/max`, `full/3680,`,
+  `full/3680,2456`) and 3 more in version 2, and every version 2 tile is a link to the version 3 tile.
+  The gem's comment ("static site builders write the real file on output") considered the repository size,
+  not the published size. Without tiles (the default threshold) lda would still be about 1.3 GB published.
+- Not checked: whether the published size has already grown this way in cb-ja-demo or cb-theme-test.
+
+Stopped here to decide how to cut the size (with the user).
+
+## 2026-10-25 (later) Decided and built: no full-size files for tiled JPEGs; lda without version 2 images (not committed)
+
+Decided (with the user): both cuts. Rejected: the gem change alone (about 880 MB, too close to 1 GB as issues
+are added); dropping tiles for lda (the gem would still publish about 1.3 GB without tiles).
+
+- Gem, worktree `static_iiif.worktrees/tiles-no-full-copy` (branch from main, 0.5.2): a JPEG that gets tiles
+  gets no `full/max`, `full/<w>,<h>` or `full/<w>,` at full size, and the full size is left out of `sizes`;
+  `StaticIIIF.image` then gives the original file (`url`) as the body, still with the service. Non-JPEG
+  sources and untiled images unchanged. README says why (Pages copies links) and how to measure (`du -shL`).
+  Tests 64 runs, 0 failures (3 new, 5 changed to the new behaviour).
+- lda: `rakelib/generate_iiif.rake` makes no version 2 folders. lda never wrote version 2 manifests (only
+  `iiif/3/`; the `_config.yml` comment that mentions `/iiif/2/` is out of date), so they served nothing.
+  Gemfile points at the gem worktree by `path:` for the trial only.
+
+Measured (lda, both builds as in `pages.yml`, then `share_ja_assets.sh`):
+
+- Generation 100 s. `objects/` 332 MB on disk; 376 links left (the 256 and 1024 sizes by width).
+- Published size (`du -shL _site`): **595 MB** (objects 358, files 183, en 25). Was 1.9 GB.
+- 446 version 3 manifests, 534 canvases: every body is `files/original/...`, every one has the service.
+- Universal Viewer (localhost, `yanesen_01_001`): reads info.json, the 460 px top level, then tiles down to
+  scale factor 1 (`.../1536,1024,512,512/512,512/...`); 58 requests to the service, all 200; text sharp.
+
+Still to do: push the gem branch and release 0.5.2, point lda at that ref, commit lda's 11,000 tile files
+(332 MB into the repository); check Mirador; look at whether cb-ja-demo / cb-theme-test also publish
+several copies per image (they may be over their expected size too).
+
+## 2026-10-26 Released 0.5.2; lda committed with tiles (not pushed)
+
+- Gem: `tiles-no-full-copy` rebased onto main after PR #1 (image-table) was merged; README conflicts
+  resolved by taking main's new layout and putting the 0.5.2 lines back in. Tests 71 runs, 0 failures.
+  Pushed, and main fast-forwarded to cec422e (0.5.2). No tags or RubyGems release, as before.
+- lda (`lda.worktrees/iiif-tiles`): Gemfile `git:` + `ref: cec422e…` (Gemfile.lock is ignored there).
+  Rebuilt as in `pages.yml` with the merged main: `du -shL _site` 595 MB, 446 version 3 manifests,
+  534 canvases, all bodies `files/original/...` with the service, no `full/max` under `objects/`.
+  Commits ac37aa0 (rake task, share script, Gemfile) and 9090019 (`objects/iiif/3`: 11,280 files,
+  376 relative links, none broken, 332 MB). Not pushed.
+- Still to do: push lda and open the PR; check Mirador; cb-ja-demo / cb-theme-test published size.
