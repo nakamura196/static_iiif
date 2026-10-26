@@ -3,6 +3,7 @@
 
 require "json"
 require "optparse"
+require "yaml"
 require_relative "../lib/static_iiif"
 
 USAGE = <<~TEXT
@@ -14,6 +15,14 @@ USAGE = <<~TEXT
   at build time instead, so leave it out for Jekyll sites).
   With --v2-dir, also writes Image API 2 folders there, as links into the
   version 3 ones (--v2-base-url gives their public URL for info.json).
+
+  Usage: static-iiif sizes [METADATA_CSV...] [options]
+
+  For images on another IIIF server (an info.json URL in object_location):
+  reads each info.json once and keeps the sizes in _iiif/services.csv, which
+  the Jekyll plugin reads to write the manifests. Run it in the site folder;
+  without METADATA_CSV it takes _data/<metadata>.csv from _config.yml.
+  Images already in the file are not read again (--refresh reads all).
 TEXT
 
 opts = { sizes: StaticIIIF::Level0::DEFAULTS[:sizes], tile_threshold: StaticIIIF::Level0::DEFAULTS[:tile_threshold],
@@ -27,10 +36,31 @@ parser = OptionParser.new do |o|
   o.on("--v2-dir DIR", "also write Image API 2 folders into DIR") { |v| opts[:v2_dir] = v }
   o.on("--v2-base-url URL", "public URL of the --v2-dir folder; writes its info.json files") { |v| opts[:v2_base_url] = v.chomp("/") }
   o.on("--force", "redo images that are up to date") { opts[:force] = true }
+  o.on("--out FILE", "sizes: the file to write (default: static_iiif: services: in _config.yml, or _iiif/services.csv)") { |v| opts[:out] = v }
+  o.on("--column NAME", "sizes: the column with the info.json URLs (default object_location)") { |v| opts[:column] = v }
+  o.on("--jobs N", Integer, "sizes: requests at a time (default 4)") { |v| opts[:jobs] = v }
+  o.on("--refresh", "sizes: read every info.json again") { opts[:refresh] = true }
   o.on("-v", "--version") { puts StaticIIIF::VERSION; exit }
 end
 parser.parse!
 command = ARGV.shift
+
+if command == "sizes"
+  config = File.file?("_config.yml") ? (YAML.safe_load_file("_config.yml", aliases: true) || {}) : {}
+  settings = config["static_iiif"].is_a?(Hash) ? config["static_iiif"] : {}
+  tables = ARGV.empty? && config["metadata"] ? ["_data/#{config['metadata']}.csv"] : ARGV
+  abort "static-iiif sizes: give the metadata CSV, or run it in a site folder with `metadata:` in _config.yml." if tables.empty?
+  out = opts[:out] || settings["services"] || "_iiif/services.csv"
+  urls = StaticIIIF::Services.urls_from_csv(tables, column: opts[:column] || "object_location")
+  puts "#{urls.size} info.json URLs in #{tables.join(', ')}"
+  result = StaticIIIF::Services.update(urls, out, jobs: opts[:jobs] || 4, refresh: opts[:refresh])
+  result[:renamed].each { |url, id| warn "Note: #{url} calls itself #{id}; the URL in the metadata is used" }
+  result[:failed].each { |url, message| warn "Failed: #{url} (#{message})" }
+  puts "Read #{result[:fetched]}, already known #{result[:reused]}, failed #{result[:failed].size}. " \
+       "#{result[:written] ? 'Wrote' : 'No change to'} #{out}"
+  puts "Run it again to retry the failed ones; items with them get no manifest until then." unless result[:failed].empty?
+  exit(result[:failed].empty? ? 0 : 1)
+end
 
 unless command == "generate" && ARGV.size == 2
   warn parser.help
