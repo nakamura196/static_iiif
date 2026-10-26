@@ -174,3 +174,120 @@ info.json, reuses the sizes already in `iiif/canvases/`, and reports images whos
 Its staff manual is written around that. So the tool in the gem is a port of something already in use,
 not a new idea; port its rules (reuse, report per row) rather than designing them again. That site's
 procedures do not change with today's decisions.
+
+## 2026-10-24 (later) Checked: how the rest of CollectionBuilder behaves with an info.json in `object_location`
+
+Tried in cb-ja-demo, worktree `cb-ja-demo.worktrees/info-json` (branch `info-json`, not committed).
+One item, `jitsu_8edec05c` (1 image): `manifest` emptied, `object_location` =
+`https://iiif.dl.itc.u-tokyo.ac.jp/iiif/jitsuroku/images/01010001.tif/info.json`, `image_small` /
+`image_thumb` left as IIIF image URLs. Built with the gem at the site's pinned ref (no change to the gem
+yet), once with `display_template: iiif` (the site's own layout), once with `image` (CollectionBuilder's).
+
+- **Manifest:** the gem writes `iiif/3/jitsu_8edec05c/manifest.json` with 0 canvases, as expected: the
+  `iiif_image` filter skips external URLs. This is the part to implement.
+- **`iiif` layout (cb-ja-demo's own):** has no download button and no item thumbnail, so the info.json
+  URL appears nowhere on the item page. Universal Viewer gets the gem's manifest.
+- **`image` layout (CollectionBuilder's default):** `image_small` shows correctly. Two things break:
+  - "Click to view full screen" (Spotlight gallery) opens `object_location` as an image: a broken-image
+    icon, checked in Chrome.
+  - The download button reads "ダウンロード JPEG" and links to the info.json (a JSON text).
+- **Browse cards:** use `image_thumb` only. Unaffected while `image_thumb` is filled; with it empty, the
+  card has no image.
+- **Data downloads** (`assets/data/metadata.json` / `.csv`): `object_location` is the info.json URL.
+- Not built, read from the templates: the featured image / jumbotron of an `image` item and
+  `feature/image-comparison` take `object_location` before `image_small` (would break the same way);
+  compound objects' child gallery and download menu use each child's `object_location` (same as above);
+  `og:image` and the timeline take `image_small` first (fine).
+- **The info.json's own id differs from the given URL:** `@id` is
+  `https://iiif.dl.itc.u-tokyo.ac.jp/iiif/2/jitsuroku%2Fimages%2F01010001.tif` (path `iiif/2/`, slashes
+  encoded), the URL in the table is `iiif/jitsuroku/images/01010001.tif`. The "given URL wins" rule above
+  has a real case. Version 2, `level2`, 5732×4046.
+
+So with CollectionBuilder's own templates, an info.json in `object_location` works only where
+`object_location` is not used as an image file (the `iiif`-style layout). Everywhere CollectionBuilder
+uses it as "the image file", it breaks.
+
+## 2026-10-24 (later) Built: info.json in `object_location` (not committed)
+
+Decided (with the user): **the plugin rewrites those rows at build time**, so CollectionBuilder's own
+templates need no change. Rejected: limiting info.json items to an `iiif`-style layout (CollectionBuilder
+has no such layout, so the gem or a theme would have to ship one, and there would be no download button).
+Cost of the choice: the value a user wrote is not the value templates see; documented in the README.
+
+What was made:
+
+- `StaticIIIF::Services` (`lib/static_iiif/services.rb`): one sizes file, `iiif/services.csv`
+  (`service,width,height,profile,version`), for the whole site, not one file per item as in the design
+  above. "Nothing half-written" moved to the build: an item with an image whose size is unknown gets no
+  manifest, and the build warns once with the count and the first one.
+- `static-iiif sizes [CSV...]`: reads `_data/<metadata>.csv` from `_config.yml` by default; reuses known
+  sizes, `--refresh`, `--jobs` (4), `--column`, `--out`; standard library only (Net::HTTP, 30 s timeout,
+  3 tries with a growing pause, 3 redirects, User-Agent `static_iiif/<version>`); exit 1 on failures;
+  writes only on change; notes when the info.json's id differs.
+- Jekyll `:site, :post_read` hook: `object_location` → `full/max` (version 3) or `full/full` (version 2,
+  also when the size is not read yet), empty `image_small` / `image_thumb` → `800,` / `400,` (widths, as
+  the ingest script uses; supported by level 1), original kept in `static_iiif_info`.
+- `DataManifests` takes `services:` and makes canvases with the given URL as the service.
+- Not done: the `iiif_image` Liquid filter (sites with their own manifest templates) still ignores
+  external URLs; the tool that fills canvases files from an image table; a Rake task.
+
+Checked:
+
+- Tests: 68 runs, 0 failures (7 new in `test/test_services.rb`, fetcher passed in, no network).
+- cb-ja-demo, worktree `info-json`, now on top of branch `gem-manifests` (the site's manifests come from the
+  gem there), `Gemfile` pointing at this worktree by `path:` (trial only). Same item `jitsu_8edec05c`.
+  Build before `sizes`: the warning, no manifest. `static-iiif sizes`: read 1, wrote the file; second run
+  "No change". Build after: v3 and v2 manifests with 1 canvas, 5732×4046, service = the URL in the metadata.
+  In Chrome: Universal Viewer shows the page (`iiif` layout); with the `image` layout the full screen view
+  loads the image (5732 px wide) and the download button links to `full/full/0/default.jpg`.
+- Not checked: an item with child rows; a version 3 server; the browse card with an empty `image_thumb`
+  (unit test only); the English build (`_config.en.yml`, `write: false`).
+
+## 2026-10-24 (later) Checked: an item with child rows
+
+cb-ja-demo, worktree `info-json`, same setup as above. `jitsu_6d9db582` made a compound object:
+`manifest` and `object_location` emptied, `display_template: compound_object`; three child rows
+`jitsu_6d9db582_001`–`003` with only `object_location` = the info.json of pages 01010064–66 (no
+`image_small` / `image_thumb`), `display_template: image`.
+
+- Build before `sizes`: warned "no manifest for 1 item(s): the size of 3 image(s) … First: jitsu_6d9db582";
+  no manifest written.
+- `static-iiif sizes`: "Read 3, already known 1, failed 0"; each info.json again calls itself
+  `iiif/2/jitsuroku%2Fimages%2F…` (noted, the metadata URL kept).
+- Build after: v3 and v2 manifests with 3 canvases in child order, labels from the child titles,
+  5732×4046 each, service = the URL in the metadata, body `full/full` (version 2 server).
+- Item page (CollectionBuilder's `compound_object` layout), in Chrome: the three child thumbnails
+  (`400,`) and medium images (`800,`) load; "full screen" and "download JPEG" for each child, and the
+  item's download menu, link to `full/full/0/default.jpg` (200, image/jpeg). No info.json URL left on the page.
+- `assets/data/metadata.csv`: the child rows' `object_location` is the rewritten `full/full` URL.
+- The CSV is CRLF; rewriting it with Python's csv module turned every line into LF (all rows in the diff).
+  Write with `\r\n` or fix afterwards.
+- Still not checked: a version 3 server; the English build.
+
+## 2026-10-24 (later) Checked: the English build
+
+cb-ja-demo, worktree `info-json`, same two items as above. Built the Japanese site to `_site`, then
+`jekyll build --config _config.yml,_config.en.yml -d _site/en` (`static_iiif.manifests.write: false`,
+`base_url: /cb-ja-demo`). Homebrew Ruby needed: the system Ruby's bundler is too old for the lockfile.
+
+- No warning in the English build: `iiif/services.csv` is read the same way, so both items count as known.
+- No manifests written under `_site/en/iiif/`, as configured. `en/items/jitsu_8edec05c.html` gives
+  Universal Viewer, the IIIF button and Mirador the Japanese build's
+  `/cb-ja-demo/iiif/3/jitsu_8edec05c/manifest.json` (1 canvas, written there).
+- `en/items/jitsu_6d9db582.html` (compound object): the same `400,` / `800,` / `full/full` URLs for the three
+  children as the Japanese page. No info.json URL in any page or data file of either build.
+- `en/assets/data/metadata.csv`: `object_location` of these rows equals the Japanese one (rewritten).
+- Found: `iiif/services.csv` is copied into the output, as `_site/iiif/services.csv` and
+  `_site/en/iiif/services.csv` (5 lines here). Harmless (sizes of public images), but not meant to be
+  published; a site can add it to `exclude`, or the gem could default to a path Jekyll skips (`_` prefix).
+  Not decided.
+- Still not checked: a version 3 server.
+
+## 2026-10-25 Decided: the sizes file moves to `_iiif/services.csv`
+
+The default of `static_iiif: services:` and of `static-iiif sizes --out` is now `_iiif/services.csv`.
+Jekyll does not copy folders whose names start with `_`, so the file stays out of `_site` without an
+`exclude:` entry in every site. Rejected: keeping `iiif/services.csv` and telling sites to exclude it (one
+more line each site has to remember, and the English build copied it too). README, the command's help and
+the test's path changed with it; tests 68 runs, 0 failures (Homebrew Ruby). Sites made with the old default
+(cb-ja-demo worktree `info-json`) need the file moved, or `services:` set.

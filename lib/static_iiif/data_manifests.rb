@@ -13,6 +13,9 @@ module StaticIIIF
   #    order. Needs `image:` (a callable that describes a site path as an image,
   #    as the Jekyll plugin passes). Rows with a `parentid` are not items, and
   #    rows with a `manifest` (an external one) are left alone.
+  #    An `object_location` may also be the info.json URL of an image on another
+  #    IIIF server; its size comes from `services:` (see Services). An item with
+  #    such an image whose size is not known gets no manifest (see #missing).
   #
   # 2. Data files, for images on an existing Image API server. Per item, named
   #    after its id:
@@ -73,14 +76,18 @@ module StaticIIIF
   #   parent_column, image_column, canvas_thumbnail, skip_column
   #                   for the site's own images (defaults parentid, object_location,
   #                   image_thumb, manifest)
+  #   info_column     where a row keeps its info.json URL after the Jekyll plugin put
+  #                   the image's own URL in object_location (default static_iiif_info)
   class DataManifests
     PLACEHOLDER = /%\{(\w+)\}/
     ABSOLUTE = %r{\A[a-z][a-z0-9+.-]*://}i
 
     attr_reader :config
 
-    def initialize(config, source: ".", base_url: "", fields: [], rows: [], image: nil)
+    def initialize(config, source: ".", base_url: "", fields: [], rows: [], image: nil, services: {})
       @config = config || {}
+      @services = services || {}
+      @missing = {}
       @source = source
       @base_url = base_url.to_s.chomp("/")
       @fields = fields.to_a
@@ -106,6 +113,9 @@ module StaticIIIF
       @available_ids ||= Dir.glob(File.join(@source, dir(:canvases, "iiif/canvases"), "*.csv"))
                             .to_h { |f| [File.basename(f, ".csv"), true] }
     end
+
+    # { item id => [info.json URLs whose size is not in services] }, filled as items are looked at
+    attr_reader :missing
 
     def id_column
       setting(:id_column) || "objectid"
@@ -166,14 +176,24 @@ module StaticIIIF
 
     # The site's own images of an item: its child rows' images, in order, or its own.
     def local_canvases(row, version)
-      return [] unless @image && setting(:local_images) != false
+      return [] if setting(:local_images) == false
       return [] if blank_to_nil(row[column(:parent_column, "parentid")]) || blank_to_nil(row[column(:skip_column, "manifest")])
 
       id = row[id_column].to_s
       images = column(:image_column, "object_location")
       parts = children[id] || [row]
+      info = column(:info_column, "static_iiif_info")
+      unknown = parts.filter_map do |part|
+        service = Services.service_of(part[info] || part[images])
+        part[info] || part[images] if service && !@services.key?(service)
+      end
+      unless unknown.empty?
+        @missing[id] = unknown # no manifest rather than one with images left out
+        return []
+      end
+
       parts.filter_map do |part|
-        image = local_image(part[images], version)
+        image = external_image(part[info] || part[images]) || local_image(part[images], version)
         next unless image
 
         { label: value(:label, part, "title"), image: image,
@@ -197,6 +217,13 @@ module StaticIIIF
 
       key = [path, version]
       @images.key?(key) ? @images[key] : (@images[key] = @image.call(path, version))
+    end
+
+    def external_image(url)
+      service = Services.service_of(url)
+      s = service && @services[service]
+      s && StaticIIIF.external_image(service, width: s["width"], height: s["height"], version: s["version"],
+                                              profile: blank_to_nil(s["profile"]) || "level1")
     end
 
     # A site path is described from its file (with its size); a URL is kept as it is.

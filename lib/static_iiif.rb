@@ -7,6 +7,7 @@ require_relative "static_iiif/level0"
 require_relative "static_iiif/image_info"
 require_relative "static_iiif/manifest"
 require_relative "static_iiif/table_of_contents"
+require_relative "static_iiif/services"
 require_relative "static_iiif/data_manifests"
 
 # Static IIIF for sites without an image server: IIIF Image API level 0 files

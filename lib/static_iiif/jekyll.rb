@@ -59,6 +59,17 @@ module StaticIIIF
   #    in 3 (nil if it has none), for a viewer on the item page:
   #
   #      {% assign manifest = page.objectid | iiif_manifest %}   {% comment %} or iiif_manifest: 2 {% endcomment %}
+  #
+  # 5. Images on another IIIF server: a row of the metadata CSV whose `object_location`
+  #    is an info.json URL is changed, right after the data is read, so that the rest
+  #    of CollectionBuilder (download button, full screen view, featured image) gets an
+  #    image: `object_location` becomes the whole image (full/max, or full/full for
+  #    version 2), empty `image_small` / `image_thumb` get 800 and 400 pixels wide
+  #    images, and the info.json URL is kept in `static_iiif_info` for the manifest.
+  #    The sizes come from the file `static-iiif sizes` writes:
+  #
+  #      static_iiif:
+  #        services: _iiif/services.csv   # default shown
   module Jekyll
     DEFAULT_IMAGES = { 3 => "objects/iiif/3", 2 => "objects/iiif/2" }.freeze
     CONFIG_KEYS = { 3 => "images", 2 => "images_v2" }.freeze
@@ -85,6 +96,37 @@ module StaticIIIF
       StaticIIIF.image(File.join(site.source, rel), url: site_url(site, rel),
                        level0_dir: File.join(site.source, images, name),
                        service_url: site_url(site, "#{images}/#{name}"), version: version)
+    end
+
+    def self.services_path(site)
+      config = site.config["static_iiif"]
+      path = config.is_a?(Hash) && config["services"] ? config["services"] : "_iiif/services.csv"
+      File.join(site.source, path.to_s.sub(%r{\A/+}, ""))
+    end
+
+    # The sizes of images on other IIIF servers (see Services), read once per build.
+    def self.services(site)
+      site.instance_variable_get(:@static_iiif_services) ||
+        site.instance_variable_set(:@static_iiif_services, Services.read(services_path(site)))
+    end
+
+    # Item 5 above: called once the site's data is read.
+    def self.use_info_json(site)
+      site.instance_variable_set(:@static_iiif_services, nil) # reread on each build of `jekyll serve`
+      rows = site.data[site.config["metadata"]]
+      return unless rows.is_a?(Array)
+
+      services = services(site)
+      rows.each do |row|
+        next unless row.is_a?(Hash) && (service = Services.service_of(row["object_location"]))
+
+        version = services.dig(service, "version") || 2
+        row["static_iiif_info"] = row["object_location"]
+        row["object_location"] = Services.full_url(service, version)
+        %w[image_small 800 image_thumb 400].each_slice(2) do |field, width|
+          row[field] = "#{service}/full/#{width},/0/default.jpg" if row[field].to_s.strip.empty?
+        end
+      end
     end
 
     # The manifests ManifestGenerator made, per site: { version => { item id => url } }
@@ -167,7 +209,8 @@ module StaticIIIF
         return unless rows.is_a?(Array)
 
         manifests = DataManifests.new(config, source: site.source, base_url: base_url, fields: fields.is_a?(Array) ? fields : [],
-                                              rows: rows, image: ->(path, version) { Jekyll.image(site, path, version) })
+                                              rows: rows, image: ->(path, version) { Jekyll.image(site, path, version) },
+                                              services: Jekyll.services(site))
         rows.each do |row|
           next unless manifests.manifest?(row)
 
@@ -182,9 +225,19 @@ module StaticIIIF
             end
           end
         end
+        warn_missing(site, manifests.missing)
       end
 
       private
+
+      def warn_missing(site, missing)
+        return if missing.empty?
+
+        images = missing.values.sum(&:size)
+        ::Jekyll.logger.warn "static_iiif:", "no manifest for #{missing.size} item(s): the size of #{images} image(s) on " \
+                                              "another IIIF server is not in #{Jekyll.services_path(site).delete_prefix("#{site.source}/")}. " \
+                                              "Run `static-iiif sizes`. First: #{missing.keys.first} (#{missing.values.first.first})"
+      end
 
       def add(site, manifests, row, id, version, made)
         paths = manifests.paths(version, id)
@@ -222,3 +275,4 @@ module StaticIIIF
 end
 
 Liquid::Template.register_filter(StaticIIIF::Jekyll::Filters)
+Jekyll::Hooks.register(:site, :post_read) { |site| StaticIIIF::Jekyll.use_info_json(site) }

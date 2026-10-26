@@ -41,9 +41,36 @@ from decides which section below applies.
 
 ### Images on another IIIF server
 
-For a site whose images are served elsewhere (an existing IIIF server), the item manifests can be
-built from plain files at build time instead of being exported once and committed. An item with
-such a file uses it, whatever its other columns say. Per item:
+Write the image's info.json URL in `object_location`, in place of an image URL: in the item's row for
+one image, or in each child row (`parentid`) for several, as for any CollectionBuilder compound object.
+
+```
+objectid,parentid,title,object_location,display_template
+doc001,,A letter,https://images.example.org/iiif/2/doc001_0001/info.json,image
+```
+
+A manifest needs each image's size, so read the info.json files once, in the site folder:
+
+```sh
+bundle exec static-iiif sizes          # reads _data/<metadata>.csv, writes _iiif/services.csv
+```
+
+Commit `_iiif/services.csv`. Run the command again after adding images: it reads only the new ones
+(`--refresh` reads all). An image that could not be read is listed, and its item gets no manifest (and a
+warning at build time) until a later run reads it. The URL in the metadata is used even when the
+info.json gives itself another id.
+
+At build time the plugin also changes these rows for the rest of CollectionBuilder, which expects an
+image file in `object_location`: it becomes the whole image (`full/max`, or `full/full` for version 2),
+so the download button and the full screen view work, and an empty `image_small` / `image_thumb` gets an
+800 / 400 pixels wide image. The info.json URL stays in `static_iiif_info` for the manifest. The sizes file
+can be put elsewhere with `static_iiif: services: <path>`.
+
+#### Canvases files
+
+For many canvases per item (a metadata CSV with tens of thousands of child rows is hard to open), for
+tables of contents, and for data moved from another system, the canvases of an item can be given in a
+file of its own instead. An item with such a file uses it, whatever its other columns say. Per item:
 
 ```
 iiif/canvases/<id>.csv   label,service,width,height[,format,profile]   one row per canvas, in order
