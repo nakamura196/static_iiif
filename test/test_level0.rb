@@ -84,16 +84,33 @@ class TestLevel0 < Minitest::Test
     meta = StaticIIIF::Level0.new(sizes: [256], tile_threshold: 500, tile_size: 256).generate(File.join(@objects, "big_map.jpg"), v3)
     assert_equal meta, StaticIIIF::Level0.derive_v2(v3, v2)
     assert_equal meta, StaticIIIF::Level0.read_meta(v2)
+    # tiled: no full size, the tiles give it
+    %w[full max 900,].each { |size| refute File.exist?(jpg(v2, size)), size }
+    assert_equal [256, 171], StaticIIIF::ImageSize.read(jpg(v2, "256,"))
+    # tiles: <w>,<h> in version 3 is <w>, in version 2
+    assert File.exist?(File.join(v2, "0,0,256,256", "256,", "0", "default.jpg"))
+    assert_empty Dir.glob(File.join(v2, "*", "*,[0-9]*"))
+  end
+
+  def test_derive_v2_links_the_full_size_to_the_original
+    v3 = File.join(@tmp, "3", "big")
+    v2 = File.join(@tmp, "2", "big")
+    StaticIIIF::Level0.new(sizes: [256], tile_threshold: 0).generate(File.join(@objects, "big_map.jpg"), v3)
+    StaticIIIF::Level0.derive_v2(v3, v2)
     # the full size by name (2.0 "full", 2.1 "max") and by width; the original, not a link to a link
     %w[full max 900,].each do |size|
       path = jpg(v2, size)
       assert File.symlink?(path), size
       assert_equal File.expand_path(File.join(@objects, "big_map.jpg")), File.expand_path(File.readlink(path), File.dirname(path))
     end
-    assert_equal [256, 171], StaticIIIF::ImageSize.read(jpg(v2, "256,"))
-    # tiles: <w>,<h> in version 3 is <w>, in version 2
-    assert File.exist?(File.join(v2, "0,0,256,256", "256,", "0", "default.jpg"))
-    assert_empty Dir.glob(File.join(v2, "*", "*,[0-9]*"))
+  end
+
+  def test_tiled_jpeg_has_no_full_size
+    dir = File.join(@tmp, "big")
+    meta = StaticIIIF::Level0.new(sizes: [256], tile_threshold: 500, tile_size: 256).generate(File.join(@objects, "big_map.jpg"), dir)
+    assert_equal [[256, 171]], meta["sizes"].map { |s| [s["width"], s["height"]] }
+    %w[max 900,600 900,].each { |size| refute File.exist?(jpg(dir, size)), size }
+    assert meta["tiles"]
   end
 
   def test_generate_dir_with_v2

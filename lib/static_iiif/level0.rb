@@ -10,7 +10,7 @@ module StaticIIIF
   # Writes the files of a IIIF Image API 3 level 0 service for one image, so it
   # can be served from any static host:
   #
-  #   <dir>/full/max/0/default.jpg          the full image
+  #   <dir>/full/max/0/default.jpg          the full image (not for tiled JPEGs, see below)
   #   <dir>/full/<w>,<h>/0/default.jpg      the full image again (clients ask for it by size)
   #   <dir>/full/<w>,<h>/0/default.jpg      each of `sizes` smaller than the image
   #   <dir>/full/<w>,/0/default.jpg         each size again, by width only (links)
@@ -22,6 +22,12 @@ module StaticIIIF
   # so a repository does not hold the original twice; static site builders
   # (Jekyll included) write the real file on output. Where symlinks are not
   # available the file is copied.
+  #
+  # A tiled JPEG gets no full-size paths at all: the tiles give the full
+  # resolution, and the manifest points at the original file instead. Links
+  # save space only in the repository; a published site (GitHub Pages packs it
+  # with `tar --dereference`) holds a copy for every link, six per image with
+  # version 2.
   #
   # Image API 2 files (see .derive_v2) are made from a finished version 3
   # folder by linking, not by processing the image again.
@@ -78,16 +84,21 @@ module StaticIIIF
     def generate(src, dir)
       FileUtils.rm_rf(dir)
       width, height = Vips.size(src)
+      tiled = tile_threshold.positive? && [width, height].max > tile_threshold
+      jpeg = src.match?(/\.jpe?g\z/i)
+      full_size = !(tiled && jpeg)
 
-      max_file = File.join(dir, "full", "max", "0", "default.jpg")
-      full_file = File.join(dir, "full", "#{width},#{height}", "0", "default.jpg")
-      FileUtils.mkdir_p([File.dirname(max_file), File.dirname(full_file)])
-      if src.match?(/\.jpe?g\z/i)
-        link(src, max_file)
-      else
-        Vips.run("vips", "copy", src, "#{max_file}[Q=90]")
+      if full_size
+        max_file = File.join(dir, "full", "max", "0", "default.jpg")
+        full_file = File.join(dir, "full", "#{width},#{height}", "0", "default.jpg")
+        FileUtils.mkdir_p([File.dirname(max_file), File.dirname(full_file)])
+        if jpeg
+          link(src, max_file)
+        else
+          Vips.run("vips", "copy", src, "#{max_file}[Q=90]")
+        end
+        link(max_file, full_file)
       end
-      link(max_file, full_file)
 
       made = sizes.select { |w| w < width }.map do |w|
         h = (height * w / width.to_f).round
@@ -96,11 +107,11 @@ module StaticIIIF
         Vips.run("vips", "thumbnail", src, "#{out}[Q=85,strip]", w.to_s, "--height", h.to_s, "--size", "force")
         { "width" => w, "height" => h }
       end
-      made << { "width" => width, "height" => height }
+      made << { "width" => width, "height" => height } if full_size
       link_by_width(dir, made)
 
       meta = { "width" => width, "height" => height, "sizes" => made }
-      tiles = tile(src, dir) if tile_threshold.positive? && [width, height].max > tile_threshold
+      tiles = tile(src, dir) if tiled
       meta["tiles"] = tiles if tiles
       File.write(File.join(dir, META_FILE), "#{JSON.pretty_generate(meta)}\n")
       meta

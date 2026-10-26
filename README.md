@@ -281,7 +281,8 @@ from its header, without an image library.
 - **Version 2 beside version 3, if you want it**: Image API 2 folders made
   entirely of links into the version 3 ones.
 - The full image is **linked, not copied**, so a repository does not hold the
-  original twice.
+  original twice. A tiled JPEG has no full-size files at all: the tiles give the
+  full resolution and the manifest points at the original.
 
 Universal Viewer asks for thumbnails as `full/<w>,/0/default.jpg` whatever the
 service's version, so every size is also linked by width; its thumbnails are 90
@@ -302,8 +303,8 @@ For every image in `objects/`, writes `objects/iiif/3/<name>/` (`<name>` is the
 file name without extension, lowercased):
 
 ```
-full/max/0/default.jpg          the full image (a link to the original JPEG)
-full/<w>,<h>/0/default.jpg      the full image by size, and each of --sizes
+full/max/0/default.jpg          the full image (a link to the original JPEG; not for tiled JPEGs)
+full/<w>,<h>/0/default.jpg      the full image by size (same), and each of --sizes
 <x>,<y>,<w>,<h>/.../default.jpg tiles (only above --tile-threshold)
 _level0.json                    what was made
 info.json                       with --base-url
@@ -324,7 +325,10 @@ only in how a size is written in the URL (`<w>,` in 2, `<w>,<h>` in 3; the full
 size is `full` or `max` in 2), so every file in it is a link to the same image
 in the version 3 folder or to the original. The repository gains links only;
 a site builder that writes real files (Jekyll in production) does publish the
-images a second time.
+images a second time, and so does GitHub Pages, which packs the site with
+`tar --dereference`: every link becomes a copy. For a site near the 1 GB
+Pages limit, measure with `du -shL _site`, and leave out version 2 if the
+viewers you use read version 3.
 
 ### Rake
 
@@ -386,6 +390,8 @@ The same setup added to CollectionBuilder-CSV's own demo data is
 
 ## Status
 
+0.5.2: no full-size files for tiled JPEGs; their manifest body is the original. Links count
+once per link when published (GitHub Pages copies them), and a tiled image needs no full size.
 0.5.1: each size also linked as `full/<w>,` in the version 3 folders (Universal Viewer's thumbnails).
 0.4: item manifests from the metadata CSV (the site's own images, or data files for images on
 another server), tables of contents. 0.3: Image API 3 level 0 and Presentation 3; optionally Image

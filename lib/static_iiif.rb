@@ -26,15 +26,17 @@ module StaticIIIF
   #   version     3, or 2 when level0_dir is an Image API 2 folder (Level0.derive_v2)
   #
   # With level 0 files the body points into the service (full/max, or
-  # full/full for version 2) and carries it; otherwise the size is read from
-  # the file header. Returns nil if the size cannot be determined.
+  # full/full for version 2) and carries it; a tiled JPEG has no full size in
+  # the service (see Level0), so its body is the file at `url`. Otherwise the
+  # size is read from the file header. Returns nil if the size cannot be determined.
   def image(path, url: nil, level0_dir: nil, service_url: nil, version: 3)
     meta = level0_dir && Level0.read_meta(level0_dir)
     if meta && service_url
       service = service_url.to_s.chomp("/")
       full = version.to_i == 2 ? "full" : "max"
-      return { "id" => "#{service}/full/#{full}/0/default.jpg", "width" => meta["width"], "height" => meta["height"],
-               "format" => "image/jpeg", "service" => service }
+      id = meta["sizes"].any? { |s| s["width"] == meta["width"] } ? "#{service}/full/#{full}/0/default.jpg" : url
+      return { "id" => id, "width" => meta["width"], "height" => meta["height"],
+               "format" => "image/jpeg", "service" => service } if id
     end
     size = path && ImageSize.read(path)
     return nil unless size && url

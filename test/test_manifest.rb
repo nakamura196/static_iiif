@@ -83,10 +83,22 @@ class TestManifest < Minitest::Test
 
   def test_image_helper_version_2
     dir = Dir.mktmpdir
-    File.write(File.join(dir, StaticIIIF::Level0::META_FILE), '{"width": 900, "height": 600, "sizes": []}')
+    File.write(File.join(dir, StaticIIIF::Level0::META_FILE), '{"width": 900, "height": 600, "sizes": [{"width": 900, "height": 600}]}')
     img = StaticIIIF.image(nil, level0_dir: dir, service_url: "https://example.org/iiif/2/p1/", version: 2)
     assert_equal "https://example.org/iiif/2/p1/full/full/0/default.jpg", img["id"]
     assert_equal "https://example.org/iiif/2/p1", img["service"]
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  def test_image_helper_without_full_size
+    # a tiled JPEG (see Level0): the body is the file itself, the service still given
+    dir = Dir.mktmpdir
+    File.write(File.join(dir, StaticIIIF::Level0::META_FILE), '{"width": 900, "height": 600, "sizes": [{"width": 256, "height": 171}]}')
+    img = StaticIIIF.image(nil, url: "https://example.org/objects/p1.jpg", level0_dir: dir, service_url: "https://example.org/iiif/3/p1/")
+    assert_equal "https://example.org/objects/p1.jpg", img["id"]
+    assert_equal "https://example.org/iiif/3/p1", img["service"]
+    assert_equal [900, 600], [img["width"], img["height"]]
   ensure
     FileUtils.rm_rf(dir)
   end

@@ -99,7 +99,7 @@ class TestLocalManifests < Minitest::Test
     assert_equal [["Book p. 1"], ["Book p. 2"]], h["items"].map { |c| c["label"]["none"] } # the child without an image is left out
     assert_equal "#{BASE}/iiif/3/book/canvas/p2", h["items"][1]["id"]
     body = h["items"][0]["items"][0]["items"][0]["body"]
-    assert_equal "#{BASE}/objects/iiif/3/p1/full/max/0/default.jpg", body["id"]
+    assert_equal "#{BASE}/objects/p1.jpg", body["id"] # tiled: the original, with the service
     assert_equal [{ "id" => "#{BASE}/objects/iiif/3/p1", "type" => "ImageService3", "profile" => "level0" }], body["service"]
   end
 
