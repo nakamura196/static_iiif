@@ -350,3 +350,10 @@ several copies per image (they may be over their expected size too).
   Commits ac37aa0 (rake task, share script, Gemfile) and 9090019 (`objects/iiif/3`: 11,280 files,
   376 relative links, none broken, 332 MB). Not pushed.
 - Still to do: push lda and open the PR; check Mirador; cb-ja-demo / cb-theme-test published size.
+
+## 2026-10-27 lda published with tiles
+
+lda PR #41 merged (8f1db0a); the Pages run succeeded. On the live site: info.json (id with the site URL,
+sizes 256 and 1024), a tile, a 1024 size and the manifest all 200; the manifest body is
+`files/original/yanesen-01/yanesen-01-001.jpg` (200) with the service. `full/max` is 404, as intended.
+Mirador still not checked.
