@@ -357,3 +357,49 @@ lda PR #41 merged (8f1db0a); the Pages run succeeded. On the live site: info.jso
 sizes 256 and 1024), a tile, a 1024 size and the manifest all 200; the manifest body is
 `files/original/yanesen-01/yanesen-01-001.jpg` (200) with the service. `full/max` is 404, as intended.
 Mirador still not checked.
+
+## 2026-10-31 Measured: cb-ja-demo and cb-theme-test published size
+
+Both sites commit `objects/iiif/` (made by `rake generate_iiif`), so changing the gem ref in the Gemfile
+alone changes nothing; the files have to be generated again. Measured on each repository's HEAD
+(cb-ja-demo 0c4bc4c, gem 8b097d9; cb-theme-test 22ea05b, gem c2806f1), built as in `pages.yml` into a
+scratch folder; then on a copy of each with `objects/iiif` removed and generated again with gem main
+(f677123, after 0.5.2). `du -shL _site`:
+
+| site | now | of which links to originals | gem main, generated again |
+| --- | --- | --- | --- |
+| cb-theme-test | 311 MB | 212 MB (54 links; originals are 38 MB) | **112 MB** |
+| cb-ja-demo | 152 MB (`en/` 76 MB is a second copy) | 26 MB (40 links; originals 19 MB) | 174 MB |
+
+- cb-theme-test is swollen by the copies (about 5.5 copies of each original), and 0.5.2 removes most of them.
+- cb-ja-demo is not much swollen by copies; half of it is the English build repeating `objects/` under
+  `en/` (lda handles that with `share_ja_assets.sh`; cb-ja-demo has no such step). Generated again it gets
+  bigger, not smaller: only 2 of its images pass the default tile threshold (4000 px; most are 2400 px), and
+  untiled images keep their full-size copies. Not looked into further.
+- Both are far under the 1 GB Pages limit, so neither is urgent.
+
+## 2026-10-31 (later) Correction and fixes: cb-ja-demo and cb-theme-test
+
+Correction: the cb-ja-demo figures above were taken on the local branch `ja-demo`, 19 commits behind
+`origin/main`. On `origin/main` (68f8093, gem c2806f1) the published size is 168 MB, of which `en/objects`
+is 70 MB, a full second copy of `objects/`.
+
+- cb-theme-test PR #3 (5e836fb): Gemfile ref to gem main f677123, `objects/iiif` generated again
+  (sizes 90;200;256;1024). Only full-size links and the full size in `sizes` went (41 files); tiles unchanged.
+  `du -shL _site` 311 MB → **112 MB**. No broken links; every image URL in the 10 manifests exists in `_site`.
+- cb-ja-demo PR #11 (de4bbdf): `_tools/share_ja_assets.sh`, the same approach as lda, run in `pages.yml`
+  after the English build. 168 MB → **98 MB**. The English build references 22 distinct image paths, all
+  present under `_site/objects`; none left under `en/objects`. cb-ja-demo's `objects/iiif` was not
+  generated again (that made it bigger; see above).
+- Not checked: the viewers in a browser on these two sites (the gem change was checked in Universal Viewer on lda).
+
+## 2026-11-01 Merged and checked on the live sites
+
+cb-theme-test PR #3 and cb-ja-demo PR #11 merged; both Pages runs succeeded.
+- cb-theme-test: the 10 live manifests (v2 and v3 of demo_001/008/013/017/018) reference 24 fetchable URLs
+  (images, info.json, sizes), all 200; `full/90,/` and `full/200,/` (Universal Viewer's thumbnails) are 200
+  for all 8 image services. The other URLs in the manifests are canvas/annotation ids (404, not meant to resolve)
+  and service ids without a trailing slash (301).
+- cb-ja-demo: `en/objects/` is gone (404); the English home, browse and an item page have no `/en/objects/` link,
+  and the image URLs they use are 200 under `/cb-ja-demo/objects/`.
+- Still not checked: the viewers opened in a browser.
