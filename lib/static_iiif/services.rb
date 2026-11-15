@@ -3,7 +3,6 @@
 require "csv"
 require "fileutils"
 require "json"
-require "net/http"
 require "uri"
 require_relative "version"
 
@@ -96,6 +95,7 @@ module StaticIIIF
     end
 
     def get(uri, timeout, redirects = 3)
+      require "net/http"
       res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: timeout, read_timeout: timeout) do |http|
         http.request(Net::HTTP::Get.new(uri, "User-Agent" => "static_iiif/#{VERSION}", "Accept" => "application/json"))
       end

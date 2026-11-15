@@ -55,12 +55,14 @@ module StaticIIIF
       File.basename(path.to_s, ".*").downcase
     end
 
-    # Process every image directly inside input_dir into output_dir/<name>.
+    # Process every image directly inside input_dir into output_dir/<name> (or only those in `only`,
+    # a list of file names or paths).
     # With v2_output_dir, also derive the Image API 2 folder v2_output_dir/<name>.
     # Yields (source, dir, meta_or_nil) per image; meta is nil when skipped.
-    def generate_dir(input_dir, output_dir, force: false, v2_output_dir: nil)
+    def generate_dir(input_dir, output_dir, force: false, v2_output_dir: nil, only: nil)
+      allowed = only&.to_h { |f| [File.basename(f.to_s).downcase, true] }
       images = Dir.children(input_dir).sort.map { |f| File.join(input_dir, f) }
-                  .select { |f| File.file?(f) && f.match?(IMAGE_EXTENSIONS) }
+                  .select { |f| File.file?(f) && f.match?(IMAGE_EXTENSIONS) && (!allowed || allowed[File.basename(f).downcase]) }
       images.map do |src|
         name = self.class.name_for(src)
         dir = File.join(output_dir, name)

@@ -126,4 +126,20 @@ class TestLevel0 < Minitest::Test
     assert_equal [true, false], made
     assert File.exist?(jpg(File.join(v2, "page1"), "400,"))
   end
+
+  def test_generate_dir_with_only_and_rake_metadata_images
+    require "static_iiif/rake_task"
+    level0 = StaticIIIF::Level0.new(tile_threshold: 0)
+    names = level0.generate_dir(@objects, @tmp, only: ["/objects/Page1.jpg"]).map { |_, dir, _| File.basename(dir) }
+    assert_equal ["page1"], names
+
+    Dir.mktmpdir do |site|
+      FileUtils.mkdir_p(File.join(site, "_data"))
+      File.write(File.join(site, "_config.yml"), "metadata: my-items\n")
+      File.write(File.join(site, "_data/my-items.csv"),
+                 "objectid,object_location\na,/objects/Page1.jpg\nb,https://example.org/img.jpg\nc,\n")
+      assert_equal ["/objects/Page1.jpg"],
+                   StaticIIIF::RakeTask.metadata_images(File.join(site, "_config.yml"), File.join(site, "_data"))
+    end
+  end
 end

@@ -239,6 +239,8 @@ module StaticIIIF
     end
 
     def provider
+      return nil unless setting(:provider)
+
       name, url = Array(setting(:provider))
       blank_to_nil(name) && [name.to_s, absolute(url) || "#{@base_url}/"]
     end

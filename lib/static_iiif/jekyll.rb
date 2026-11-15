@@ -193,10 +193,31 @@ module StaticIIIF
       safe true
       priority :low
 
+      CB_MANIFEST_DEFAULTS = {
+        "summary" => "description",
+        "rights" => "rightsstatement",
+        "homepage" => "items/%{objectid}.html",
+        "provider" => true,
+        "metadata_skip" => %w[title description rightsstatement]
+      }.freeze
+
       def generate(site)
-        config = site.config["static_iiif"]
-        config = config["manifests"] if config.is_a?(Hash)
-        return unless config.is_a?(Hash) && config["enabled"] != false
+        raw = site.config["static_iiif"]
+        return if raw == false
+
+        config = raw.is_a?(Hash) ? raw["manifests"] : nil
+        return if config == false
+
+        if site.data.key?("config-metadata")
+          return if config.is_a?(Hash) && config["enabled"] == false
+
+          defaults = CB_MANIFEST_DEFAULTS
+          lang = site.config["lang"].to_s.strip
+          defaults = defaults.merge("language" => lang) unless lang.empty?
+          config = defaults.merge(config.is_a?(Hash) ? config : {})
+        else
+          return unless config.is_a?(Hash) && config["enabled"] != false
+        end
 
         made = Jekyll.manifests(site)
         made.each_value(&:clear)

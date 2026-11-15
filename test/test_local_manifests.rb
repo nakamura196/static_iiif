@@ -168,4 +168,17 @@ class TestLocalManifests < Minitest::Test
     config["static_iiif"]["manifests"]["local_images"] = false
     refute File.exist?(File.join(build(config), "iiif"))
   end
+
+  def test_collectionbuilder_zero_config_defaults
+    config = { "url" => "https://example.org", "baseurl" => "/demo", "title" => "Demo site", "lang" => "ja",
+               "plugins" => [], "metadata" => "metadata" }
+    out = build(config)
+    h = read(out, "iiif/3/map/manifest.json")
+    assert_equal "#{BASE}/iiif/3/map/manifest.json", h["id"]
+    assert_equal({ "none" => ["A campus map"] }, h["summary"])
+    assert_equal "http://creativecommons.org/licenses/by/4.0/", h["rights"]
+    assert_equal "#{BASE}/items/map.html", h["homepage"][0]["id"]
+    assert_equal({ "ja" => ["Demo site"] }, h["provider"][0]["label"])
+    assert_equal [{ "label" => { "ja" => ["Rights"] }, "value" => { "none" => ["CC BY 4.0"] } }], h["metadata"]
+  end
 end

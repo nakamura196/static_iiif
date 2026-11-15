@@ -125,7 +125,9 @@ CSV needs no new columns:
   an item with no image of its own gets no manifest
 
 Each image uses its level 0 folder if `rake generate_iiif` made one (Part 2), and the image file otherwise.
-Thumbnails come from `image_thumb`, with their size. A minimal setup for CollectionBuilder:
+Thumbnails come from `image_thumb`, with their size.
+
+In a CollectionBuilder-CSV site (`_data/config-metadata.csv` present), the plugin works with **no `static_iiif:` block in `_config.yml`**: it defaults to `summary: description`, `rights: rightsstatement`, `homepage: items/%{objectid}.html`, `provider: true`, `metadata_skip: [title, description, rightsstatement]`, and `language` from `_config.yml`'s `lang:` (if set). Override any of these under `static_iiif: manifests:`:
 
 ```yaml
 static_iiif:
@@ -135,7 +137,7 @@ static_iiif:
     summary: description
     rights: rightsstatement
     homepage: items/%{objectid}.html     # a path on the site, or a full URL
-    provider: true                       # the site's title and url
+    provider: true                       # the site's title and url (false to omit)
     required_statement: [Rights, rights] # a label, and a column (or text)
     metadata_skip: [title, description, manifest]
     behavior: individuals                # or paged, continuous; or the name of a column
@@ -339,6 +341,8 @@ StaticIIIF::RakeTask.new # rake generate_iiif; settable: input_dir, output_dir, 
 StaticIIIF::RakeTask.new { |t| t.v2_output_dir = "objects/iiif/2" } # version 2 as well
 ```
 
+When `_config.yml` names a `metadata:` CSV in `_data/`, `rake generate_iiif` processes only the images listed in that CSV's `object_location` column (so template sample images in `objects/` are skipped).
+
 ### info.json at build time
 
 ```yaml
@@ -390,6 +394,7 @@ The same setup added to CollectionBuilder-CSV's own demo data is
 
 ## Status
 
+0.5.3: CollectionBuilder-CSV sites (`_data/config-metadata.csv` present) need no `static_iiif:` block in `_config.yml`; `rake generate_iiif` processes only images listed in the metadata CSV's `object_location`.
 0.5.2: no full-size files for tiled JPEGs; their manifest body is the original. Links count
 once per link when published (GitHub Pages copies them), and a tiled image needs no full size.
 0.5.1: each size also linked as `full/<w>,` in the version 3 folders (Universal Viewer's thumbnails).

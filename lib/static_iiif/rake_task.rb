@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require "csv"
 require "rake"
 require "rake/tasklib"
+require "yaml"
 require_relative "../static_iiif"
 
 module StaticIIIF
@@ -18,9 +20,13 @@ module StaticIIIF
   # tile_threshold (0 = never tile), tile_size, force ("true" redoes up-to-date images),
   # v2_output_dir (also make Image API 2 folders there; see Level0.derive_v2).
   #
+  # When `_config.yml` gives `metadata:` and `_data/<metadata>.csv` exists (as in
+  # CollectionBuilder-CSV), only the images listed in that CSV's `object_location`
+  # column are processed, so template demo images left in `objects/` are skipped.
+  #
   #   StaticIIIF::RakeTask.new { |t| t.v2_output_dir = "objects/iiif/2" } # version 2 as well
   class RakeTask < ::Rake::TaskLib
-    attr_accessor :name, :input_dir, :output_dir, :sizes, :tile_threshold, :tile_size, :v2_output_dir
+    attr_accessor :name, :input_dir, :output_dir, :sizes, :tile_threshold, :tile_size, :v2_output_dir, :only
 
     def initialize(name = :generate_iiif)
       super()
@@ -31,8 +37,30 @@ module StaticIIIF
       @tile_threshold = Level0::DEFAULTS[:tile_threshold]
       @tile_size = Level0::DEFAULTS[:tile_size]
       @v2_output_dir = nil
+      @only = nil
       yield self if block_given?
       define
+    end
+
+    def self.metadata_images(config_file = "_config.yml", data_dir = "_data")
+      return nil unless File.file?(config_file)
+
+      config = YAML.safe_load_file(config_file, permitted_classes: [Date, Time])
+      metadata = config.is_a?(Hash) && config["metadata"].to_s.strip
+      return nil if metadata.nil? || metadata.empty?
+
+      csv_path = File.join(data_dir, "#{metadata.sub(/\.csv\z/i, '')}.csv")
+      return nil unless File.file?(csv_path)
+
+      col = (config.dig("static_iiif", "manifests", "image_column") || "object_location").to_s
+      files = []
+      CSV.foreach(csv_path, headers: true, encoding: "UTF-8") do |row|
+        val = row[col].to_s.strip
+        files << val unless val.empty? || val.match?(DataManifests::ABSOLUTE)
+      end
+      files
+    rescue StandardError
+      nil
     end
 
     private
@@ -51,7 +79,8 @@ module StaticIIIF
         output = args[:output_dir] || output_dir
         v2_output = args[:v2_output_dir] || v2_output_dir
         v2_output = nil if v2_output.to_s.empty?
-        level0.generate_dir(input, output, force: args[:force] == "true", v2_output_dir: v2_output) do |src, dir, meta|
+        only_files = only.nil? ? self.class.metadata_images : only
+        level0.generate_dir(input, output, force: args[:force] == "true", v2_output_dir: v2_output, only: only_files) do |src, dir, meta|
           next puts("Skipping: #{dir} is up to date") unless meta
 
           tiles = meta["tiles"] ? ", tiles" : ""
