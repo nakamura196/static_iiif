@@ -52,11 +52,12 @@ module StaticIIIF
   #   profile  "level1" (default), "level2", ... or a full profile URI
   #
   # The body points at the whole image (full/full for version 2, full/max for
-  # version 3) and carries the service with its version and profile.
-  def external_image(service_url, width:, height:, version: 2, profile: "level1", format: "image/jpeg")
+  # version 3) and carries the service with its version and profile. `id` overrides
+  # that URL (Services.full_url gives one the server can answer, from its info.json).
+  def external_image(service_url, width:, height:, version: 2, profile: "level1", format: "image/jpeg", id: nil)
     service = service_url.to_s.chomp("/")
     full = version.to_i == 2 ? "full" : "max"
-    { "id" => "#{service}/full/#{full}/0/default.jpg", "width" => width.to_i, "height" => height.to_i,
+    { "id" => id || "#{service}/full/#{full}/0/default.jpg", "width" => width.to_i, "height" => height.to_i,
       "format" => format, "service" => service, "service_version" => version.to_i == 2 ? 2 : 3,
       "profile" => profile.to_s.empty? ? "level1" : profile.to_s }
   end

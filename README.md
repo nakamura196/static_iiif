@@ -63,8 +63,23 @@ info.json gives itself another id.
 At build time the plugin also changes these rows for the rest of CollectionBuilder, which expects an
 image file in `object_location`: it becomes the whole image (`full/max`, or `full/full` for version 2),
 so the download button and the full screen view work, and an empty `image_small` / `image_thumb` gets an
-800 / 400 pixels wide image. The info.json URL stays in `static_iiif_info` for the manifest. The sizes file
+image about 800 / 400 pixels wide. The info.json URL stays in `static_iiif_info` for the manifest. The sizes file
 can be put elsewhere with `static_iiif: services: <path>`.
+
+These image URLs follow what each info.json says the server can give, since the command also keeps its
+`sizes` and its `maxWidth` / `maxHeight` / `maxArea`:
+
+- **level 0** (static files): only the listed sizes. The thumbnail is the smallest listed size at least
+  400 (800) pixels wide, or else the largest; the whole image is the largest listed size when the full
+  size is not listed. Listed sizes are asked for in the canonical form (`w,` for version 2, `w,h` for 3).
+- **level 1 and 2**: a listed size from 400 (800) to twice that is used when there is one, since the server
+  has it ready (IIPImage, for example, lists halvings of the image); else 400 (800), but never wider than
+  the image, and within the limits. For version 2, `full/full` gives way to the largest width within the
+  limits when the image is over them (version 3's `max` already is).
+
+A `services.csv` written by 0.5.3 or before has no `sizes` column: `static-iiif sizes` reads those
+info.json files again. A thumbnail you write in `image_thumb` / `image_small` yourself, such as an IIIF URL
+of your choice, is kept as it is.
 
 #### Canvases files
 
@@ -394,6 +409,7 @@ The same setup added to CollectionBuilder-CSV's own demo data is
 
 ## Status
 
+0.5.4: images on another IIIF server get thumbnail and full-image URLs that their info.json says the server can give (level 0 sizes, `maxWidth` / `maxHeight` / `maxArea`); `services.csv` keeps `sizes` and the limits.
 0.5.3: CollectionBuilder-CSV sites (`_data/config-metadata.csv` present) need no `static_iiif:` block in `_config.yml`; `rake generate_iiif` processes only images listed in the metadata CSV's `object_location`.
 0.5.2: no full-size files for tiled JPEGs; their manifest body is the original. Links count
 once per link when published (GitHub Pages copies them), and a tiled image needs no full size.
