@@ -120,11 +120,12 @@ module StaticIIIF
       rows.each do |row|
         next unless row.is_a?(Hash) && (service = Services.service_of(row["object_location"]))
 
-        version = services.dig(service, "version") || 2
+        info = services[service]
+        version = (info && info["version"]) || 2
         row["static_iiif_info"] = row["object_location"]
-        row["object_location"] = Services.full_url(service, version)
+        row["object_location"] = Services.full_url(service, version, info)
         %w[image_small 800 image_thumb 400].each_slice(2) do |field, width|
-          row[field] = "#{service}/full/#{width},/0/default.jpg" if row[field].to_s.strip.empty?
+          row[field] = Services.sized_url(service, info, width) if row[field].to_s.strip.empty?
         end
       end
     end

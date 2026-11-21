@@ -223,7 +223,8 @@ module StaticIIIF
       service = Services.service_of(url)
       s = service && @services[service]
       s && StaticIIIF.external_image(service, width: s["width"], height: s["height"], version: s["version"],
-                                              profile: blank_to_nil(s["profile"]) || "level1")
+                                              profile: blank_to_nil(s["profile"]) || "level1",
+                                              id: Services.full_url(service, s["version"], s))
     end
 
     # A site path is described from its file (with its size); a URL is kept as it is.
@@ -255,7 +256,10 @@ module StaticIIIF
 
     def first_thumbnail(canvases)
       service = canvases.first && canvases.first[:image]["service"]
-      service && StaticIIIF.thumbnail_url(service, setting(:thumbnail_width) || 400)
+      width = setting(:thumbnail_width) || 400
+      return nil unless service
+
+      @services[service] ? Services.sized_url(service, @services[service], width) : StaticIIIF.thumbnail_url(service, width)
     end
 
     def setting(key)
